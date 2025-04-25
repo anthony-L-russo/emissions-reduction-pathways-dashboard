@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # Load data
-df = pd.read_csv('/Users/anthonyrusso/Documents/statistics-visualization-tool/data/country_subsector.csv' \
+df = pd.read_csv('/Users/anthonyrusso/Documents/statistics-visualization-tool/data/country_subsector_emissions_statistics_202504.csv' \
 '')
 
 # filter only to co2e_100yr for consistency
