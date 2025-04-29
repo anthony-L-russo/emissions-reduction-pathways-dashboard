@@ -33,8 +33,8 @@ for subsector in target_subsectors:
     total_slope = sub_df["emissions_slope_36_months_t_per_month"].sum()
 
     # summarize the total change and the 36 month slope (average monthly emission change past 3 years)
-    st.markdown(f"**Total Emission Change (Jan 2025 vs. prior month):** `{total_change:,.0f}` tCO₂e")
-    st.markdown(f"**Total Trend Slope (3-year):** `{total_slope:,.2f}` tCO₂e/month")
+    st.markdown(f"**Total Emission Change (Feb 2025 vs. prior month):** `{total_change:,.0f}` tCO₂e")
+    st.markdown(f"**Total Trend Slope (3-year):** `{total_slope:,.0f}` tCO₂e/month")
 
     # top 5 contributors to monthly change
     st.markdown("**Top 5 Contributors to Monthly Change:**")
@@ -43,17 +43,17 @@ for subsector in target_subsectors:
 
     st.table(top_movers[[
         "country_name",
-        "emissions_quantity_202501",
+        "emissions_quantity_202502",
         "monthly_emission_change",
         "emissions_slope_36_months_t_per_month"
     ]].rename(columns={
         "country_name": "Country",
-        "emissions_quantity_202501": "Jan 2025 Emissions (tCO₂e)",
-        "monthly_emission_change": "Change from Dec 2024 (tCO₂e)",
+        "emissions_quantity_202502": "Feb 2025 Emissions (tCO₂e)",
+        "monthly_emission_change": "Change from Jan 2025 (tCO₂e)",
         "emissions_slope_36_months_t_per_month": "3-Yr Trend (tCO₂e/month)"
     }).style.format({
-        "Jan 2025 Emissions (tCO₂e)": "{:,.0f}",
-        "Change from Dec 2024 (tCO₂e)": "{:,.0f}",
+        "Feb 2025 Emissions (tCO₂e)": "{:,.0f}",
+        "Change from Jan 2025 (tCO₂e)": "{:,.0f}",
         "3-Yr Trend (tCO₂e/month)": "{:,.0f}"
     }))
 
