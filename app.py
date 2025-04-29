@@ -78,9 +78,9 @@ if subsector == 'All':
 
     df_stats_agg = df_stats_filtered.groupby('country_name').agg(agg_dict).reset_index()
 
-    # Recalculate percent changes properly
-    df_stats_agg['mom_percent_change'] = df_stats_agg['mom_change'] / df_stats_agg[emissions_column_prev]
-    df_stats_agg['month_yoy_percent_change'] = df_stats_agg['month_yoy_change'] / (df_stats_agg[emissions_column_latest] - df_stats_agg['month_yoy_change'])
+    # Recalculate percent changes properly and convert to percentage units (multiply by 100)
+    df_stats_agg['mom_percent_change'] = (df_stats_agg['mom_change'] / df_stats_agg[emissions_column_prev]) * 100
+    df_stats_agg['month_yoy_percent_change'] = (df_stats_agg['month_yoy_change'] / (df_stats_agg[emissions_column_latest] - df_stats_agg['month_yoy_change'])) * 100
 
     # Normalize weighted slope back to avg slope
     if 'slope_times_emissions' in df_stats_filtered.columns:
@@ -127,8 +127,8 @@ if scope == 'Country':
         top_emitters_df[display_cols].rename(columns=rename_map).style.format({
             'emissions_quantity': "{:,.0f}",
             'mom_change': "{:,.0f}",
-            'mom_percent_change': "{:,.1f}%",
-            'month_yoy_percent_change': "{:,.1f}%",
+            'mom_percent_change': "{:.1f}%",
+            'month_yoy_percent_change': "{:.1f}%",
             'emissions_slope_36_months_t_per_month': "{:.2f}"
         }).applymap(color_mom_change, subset=['mom_change'])
     )
@@ -174,7 +174,7 @@ with col1:
     st.plotly_chart(fig_activity, use_container_width=True)
 
 with col2:
-    st.subheader("Emission Factor Over Time")
+    st.subheader("Emissions Factor Over Time")
     fig_ef = px.line(
         total_monthly_df,
         x='year_month',
