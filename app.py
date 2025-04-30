@@ -1,6 +1,17 @@
 import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
+import base64
+
+
+def get_base64_of_bin_file(bin_file_path):
+    with open(bin_file_path, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+
+st.set_page_config(layout="wide")
 
 # Load the monthly shipping emissions dataset
 # This contains emissions data for each country-subsector-month
@@ -10,7 +21,7 @@ df['year_month'] = pd.to_datetime(df['year_month'])  # Convert to datetime for p
 df['year'] = df['year_month'].dt.year  # Extract year for potential grouping
 countries = df['country_name'].dropna().unique()  # Unique list of countries for dropdown
 
-# Load the precomputed statistics file (includes month over month change, slope, etc.)
+# Load the statistics file (includes month over month change, slope, etc.)
 df_stats = pd.read_csv('data/statistics/country_subsector_emissions_statistics_202504.csv')
 
 # Dynamically find the most recent emissions quantity column from statistics
@@ -20,13 +31,30 @@ emissions_column_latest = emissions_columns_sorted[0]  # Most recent month
 emissions_column_prev = emissions_columns_sorted[1]    # Previous month
 
 # Streamlit page config and title
-st.set_page_config(layout="wide")
-st.title("Shipping Emissions Dashboard")
+
+
+# Logo and Title side by side
+logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
+
+st.markdown(
+    f"""
+    <div style="display: flex; align-items: center;">
+        <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
+        <h1 style="margin: 0;">Climate TRACE Emissions Dashboard</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# adding some space between title and toggle/dropdowns
+st.markdown("<br><br>", unsafe_allow_html=True)
+
 
 # Sidebar selectors for global/country and subsector filter
 col1, col2 = st.columns(2)
 with col1:
-    scope = st.selectbox("View Scope", options=['Global', 'Country'])
+    scope = st.radio("View Scope", options=['Global', 'Country'], horizontal=True)
+
 with col2:
     subsector = st.selectbox("Select Subsector", options=['All', 'Domestic Shipping', 'International Shipping'])
 
@@ -34,19 +62,23 @@ with col2:
 subsector_mapping = {
     'All': None,
     'Domestic Shipping': 'domestic-shipping',
-    'International Shipping': 'international-shipping'
+    'International Shipping': 'international-shipping',
+    'Electricity Generation': 'electricity-generation'
 }
 internal_subsector = subsector_mapping[subsector]
 
 # Country selector if "Country" scope is selected
 if scope == 'Country':
-    st.subheader('Select a Country')
-    country_options = ["-- Select a Country --"] + sorted(countries)
-    selected_country = st.selectbox('Pick a Country', options=country_options)
-    if selected_country == "-- Select a Country --":
+    # st.subheader('Select a Country')
+    country_options = ["-- All Countries --"] + sorted(countries)
+    selected_country = st.selectbox('Select a Country', options=country_options)
+    if selected_country == "-- All Countries --":
         selected_country = None
 else:
     selected_country = None
+
+# adding some space for visual appeal
+st.markdown("<br><br>", unsafe_allow_html=True)
 
 # Get the latest month in the monthly emissions dataset (not statistics)
 df_for_latest_month = df[df['gas'] == 'co2e_100yr']
@@ -105,7 +137,7 @@ else:
 
 # Display Top Movers Table (Country Scope only)
 if scope == 'Country':
-    st.markdown('**Top 10 Shipping Movers (by Absolute MoM Change)**')
+    st.markdown('**Top 10 Movers (by Absolute MoM Change)**')
 
     df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
     top_emitters_df = (
