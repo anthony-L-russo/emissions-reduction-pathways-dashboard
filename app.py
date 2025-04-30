@@ -119,7 +119,7 @@ if scope == 'Country':
     display_cols = ['country_name', emissions_column_latest, 'mom_change', 'mom_percent_change', 'month_yoy_percent_change', 'emissions_slope_36_months_t_per_month']
     rename_map = {emissions_column_latest: 'emissions_quantity'}
 
-    def color_mom_change(val):
+    def color_change(val):
         color = 'green' if val < 0 else 'red'
         return f'color: {color}'
 
@@ -129,8 +129,8 @@ if scope == 'Country':
             'mom_change': "{:,.0f}",
             'mom_percent_change': "{:.1f}%",
             'month_yoy_percent_change': "{:.1f}%",
-            'emissions_slope_36_months_t_per_month': "{:.2f}"
-        }).applymap(color_mom_change, subset=['mom_change'])
+            'emissions_slope_36_months_t_per_month': "{:,.0f}"
+        }).applymap(color_change, subset=['mom_change','emissions_slope_36_months_t_per_month'])
     )
 
 # Build data for time series plots (monthly aggregation)
