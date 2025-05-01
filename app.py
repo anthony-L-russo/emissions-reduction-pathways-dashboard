@@ -56,7 +56,7 @@ with col1:
     scope = st.radio("View Scope", options=['Global', 'Country'], horizontal=True)
 
 with col2:
-    subsector = st.selectbox("Select Subsector", options=['All', 'Domestic Shipping', 'International Shipping'])
+    subsector = st.selectbox("Select Subsector", options=['All', 'Electricity Generation', 'Domestic Shipping', 'International Shipping'])
 
 # Mapping UI label to internal field value in dataset
 subsector_mapping = {
@@ -91,7 +91,7 @@ latest_month_str = latest_month.strftime("%B %Y")
 # Filter the statistics dataset for shipping subsectors and non-null countries
 df_stats_filtered = df_stats[df_stats['gas'] == 'co2e_100yr']
 df_stats_filtered = df_stats_filtered[df_stats_filtered['country_name'].notna()]
-df_stats_filtered = df_stats_filtered[df_stats_filtered['subsector'].isin(['domestic-shipping', 'international-shipping'])]
+df_stats_filtered = df_stats_filtered[df_stats_filtered['subsector'].isin(['domestic-shipping', 'international-shipping', 'electricity-generation'])]
 if internal_subsector:
     df_stats_filtered = df_stats_filtered[df_stats_filtered['subsector'] == internal_subsector]
 
@@ -168,7 +168,7 @@ if scope == 'Country':
 # Build data for time series plots (monthly aggregation)
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered['gas'] == 'co2e_100yr']
-df_filtered = df_filtered[df_filtered['original_inventory_sector'].isin(['domestic-shipping', 'international-shipping'])]
+df_filtered = df_filtered[df_filtered['original_inventory_sector'].isin(['domestic-shipping', 'international-shipping', 'electricity-generation'])]
 if internal_subsector:
     df_filtered = df_filtered[df_filtered['original_inventory_sector'] == internal_subsector]
 if scope == 'Country' and selected_country:
