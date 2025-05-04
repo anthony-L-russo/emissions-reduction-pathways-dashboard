@@ -177,9 +177,11 @@ if scope == 'Country' and selected_country:
 # Monthly time series aggregation
 total_monthly_df = df_filtered.groupby('year_month').agg({
     'activity': 'sum',
-    'mean_emissions_factor': 'mean',
     'emissions_quantity': 'sum'
 }).reset_index()
+
+# Calculate weighted emission factor
+total_monthly_df['mean_emissions_factor'] = total_monthly_df['emissions_quantity'] / total_monthly_df['activity']
 
 # Emissions trend plot
 st.subheader(f"Emissions Over Time - {selected_country or 'Global'} | {subsector}")
