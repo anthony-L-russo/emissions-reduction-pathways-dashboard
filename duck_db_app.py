@@ -36,8 +36,6 @@ st.markdown(
 )
 st.markdown("<br><br>", unsafe_allow_html=True)
 
-# Load statistics CSV for dropdowns and table
-
 # Scope dropdown options
 region_options = [
     'Global', 'EU', 'OECD', 'Non-OECD',
@@ -74,7 +72,7 @@ col1, col2, col3 = st.columns(3)
 
 # Scope dropdown
 with col1:
-    selected_scope = st.selectbox("Scope", region_options + unique_countries, key="selected_scope")
+    selected_scope = st.selectbox("Region", region_options + unique_countries, key="selected_scope")
     region_condition = map_region_condition(selected_scope)
 
 # Sector dropdown
@@ -214,7 +212,7 @@ query_country = f'''
         SUM(emissions_quantity) AS country_emissions_quantity
     FROM read_csv_auto('{country_emissions_csv_path}')
     WHERE gas = 'co2e_100yr'
-      AND month >= 2 AND year >= 2022
+      AND MAKE_DATE(year, month, 1) >= DATE '2022-02-01'
       AND country_name IS NOT NULL
       {'AND subsector = \'%s\'' % selected_subsector_raw if selected_subsector_raw else ''}
       {'AND sector = \'%s\'' % selected_sector_raw if selected_sector_raw else ''}
