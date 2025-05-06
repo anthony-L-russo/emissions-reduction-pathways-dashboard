@@ -3,7 +3,7 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import base64
-from utils.utils import format_dropdown_options
+from utils.utils import format_dropdown_options, map_region_condition
 
 st.set_page_config(layout="wide")
 
@@ -28,14 +28,30 @@ st.markdown(
         <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
         <h1 style="margin: 0;">Climate TRACE Emissions Dashboard</h1>
     </div>
-    <p style="margin-top: 5px; font-size: 0.95em; font-style: italic; color: #ffffff;">
-        The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong>{release_version}</strong></span>
+    <p style="margin-top: 5px; font-size: 1em; font-style: italic; color: white;">
+        The data in this dashboard is from Climate TRACE <span style='color: red;'><strong>Release {release_version}</strong></span>
     </p>
     """,
     unsafe_allow_html=True
 )
 st.markdown("<br><br>", unsafe_allow_html=True)
 
+# Build scope dropdown
+region_options = [
+    'Global',
+    'EU', 'OECD', 'Non-OECD',
+    'UNFCCC Annex', 'UNFCCC Non-Annex',
+    'Global North', 'Global South',
+    'Developed Markets', 'Emerging Markets',
+    'Africa', 'Antarctica', 'Asia', 'Europe', 'North America', 'Oceania', 'South America'
+]
+
+unique_countries = sorted([
+    row[0] for row in con.execute(f"SELECT DISTINCT country_name FROM '{parquet_path}' WHERE country_name IS NOT NULL").fetchall()
+])
+scope_options = region_options + unique_countries
+
+# Subsector options
 raw_subsectors = con.execute(f"""
     SELECT DISTINCT original_inventory_sector
     FROM '{parquet_path}'
@@ -47,17 +63,11 @@ subsector_labels, subsector_map = format_dropdown_options(raw_subsectors)
 subsector_labels.insert(0, "All")
 subsector_map["All"] = None
 
-country_options = ["Global"] + sorted(
-    [row[0] for row in con.execute(f"""
-        SELECT DISTINCT country_name FROM '{parquet_path}' WHERE country_name IS NOT NULL
-    """).fetchall()]
-)
-
 # Sidebar filters
 col1, col2 = st.columns(2)
 with col1:
-    selected_scope = st.selectbox("Scope", country_options)
-    selected_country = None if selected_scope == "Global" else selected_scope
+    selected_scope = st.selectbox("Scope", scope_options)
+    region_condition = map_region_condition(selected_scope)
 with col2:
     default_index = 0
     if "selected_subsector_label" in st.session_state:
@@ -80,15 +90,21 @@ emissions_column_latest = emissions_columns_sorted[0]
 emissions_column_prev = emissions_columns_sorted[1]
 
 # Build query to DuckDB
+where_clauses = ["gas = 'co2e_100yr'"]
+if selected_subsector_raw:
+    where_clauses.append(f"original_inventory_sector = '{selected_subsector_raw}'")
+if region_condition:
+    value = region_condition['column_value']
+    value_str = f"'{value}'" if isinstance(value, str) else str(value).upper()
+    where_clauses.append(f"{region_condition['column_name']} = {value_str}")
+
 query = f"""
     SELECT 
         strftime(start_time, '%Y-%m') AS year_month,
         SUM(activity) AS activity,
         SUM(emissions_quantity) AS emissions_quantity
     FROM '{parquet_path}'
-    WHERE gas = 'co2e_100yr'
-    {f"AND original_inventory_sector = '{selected_subsector_raw}'" if selected_subsector_raw else ""}
-    {f"AND country_name = '{selected_country}'" if selected_country else ""}
+    WHERE {' AND '.join(where_clauses)}
     GROUP BY year_month
     ORDER BY year_month
 """
@@ -107,8 +123,12 @@ country_name_map = {
 }
 df_stats_filtered['country_name'] = df_stats_filtered['country_name'].replace(country_name_map)
 
-if selected_country:
-    df_stats_filtered = df_stats_filtered[df_stats_filtered['country_name'] == selected_country]
+if selected_scope != 'Global':
+    region_cond = map_region_condition(selected_scope)
+    if region_cond:
+        df_stats_filtered = df_stats_filtered[df_stats_filtered[region_cond['column_name']] == region_cond['column_value']]
+    else:
+        df_stats_filtered = df_stats_filtered[df_stats_filtered['country_name'] == selected_scope]
 
 if selected_subsector_raw:
     df_stats_filtered = df_stats_filtered[df_stats_filtered['subsector'] == selected_subsector_raw]
@@ -117,21 +137,17 @@ else:
         df_stats_filtered['slope_times_emissions'] = (
             df_stats_filtered['emissions_slope_36_months_t_per_month'] * df_stats_filtered[emissions_column_latest]
         )
-
     agg_dict = {
         emissions_column_latest: 'sum',
         emissions_column_prev: 'sum',
         'mom_change': 'sum',
         'month_yoy_change': 'sum'
     }
-
     df_stats_agg = df_stats_filtered.groupby('country_name').agg(agg_dict).reset_index()
-
     df_stats_agg['mom_percent_change'] = (df_stats_agg['mom_change'] / df_stats_agg[emissions_column_prev]) * 100
     df_stats_agg['month_yoy_percent_change'] = (
         df_stats_agg['month_yoy_change'] / (df_stats_agg[emissions_column_latest] - df_stats_agg['month_yoy_change'])
     ) * 100
-
     if 'slope_times_emissions' in df_stats_filtered.columns:
         slopes = df_stats_filtered.groupby('country_name').agg({
             'slope_times_emissions': 'sum',
@@ -145,7 +161,6 @@ else:
             on='country_name',
             how='left'
         )
-
     df_stats_filtered = df_stats_agg
 
 df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
@@ -160,6 +175,7 @@ display_cols = [
     'month_yoy_percent_change',
     'emissions_slope_36_months_t_per_month'
 ]
+
 rename_map = {
     emissions_column_latest: 'Emissions ' + emissions_column_latest[-6:-2] + '-' + emissions_column_latest[-2:],
     emissions_column_prev: 'Emissions ' + emissions_column_prev[-6:-2] + '-' + emissions_column_prev[-2:],
@@ -170,7 +186,7 @@ def color_change(val):
     return f'color: {"green" if val < 0 else "red"}'
 
 # Plotting
-st.subheader(f"Emissions Over Time - {selected_country or 'Global'} | {selected_subsector_label}")
+st.subheader(f"Emissions Over Time - {selected_scope} | {selected_subsector_label}")
 fig_emissions = px.line(
     monthly_df,
     x='year_month',

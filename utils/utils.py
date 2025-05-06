@@ -24,7 +24,7 @@ def format_dropdown_options(raw_values, lowercase_words=None):
     return options, mapping
 
 
-
+# function finds us the correct column and value to use as a condition based on the dropdown selection
 def map_region_condition(region_selection):
     
     list_of_continents = ['Africa',
