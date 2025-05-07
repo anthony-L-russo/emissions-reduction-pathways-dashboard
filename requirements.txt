@@ -5,8 +5,7 @@ cachetools==5.5.2
 certifi==2025.1.31
 charset-normalizer==3.4.1
 click==8.1.8
-# Editable install with no version control (climate_trace_tools==0.0.1)
--e /Users/anthonyrusso/Documents/climate-trace-tools
+duckdb==1.2.2
 gitdb==4.0.12
 GitPython==3.1.44
 idna==3.10

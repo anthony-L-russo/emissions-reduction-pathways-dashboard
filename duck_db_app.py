@@ -1,0 +1,322 @@
+import streamlit as st
+import duckdb
+import pandas as pd
+import plotly.express as px
+import base64
+from utils.utils import format_dropdown_options, map_region_condition
+
+st.set_page_config(layout="wide")
+
+# Load logo
+def get_base64_of_bin_file(bin_file_path):
+    with open(bin_file_path, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
+
+# Connect to DuckDB
+parquet_path = "data/asset_parquet/asset_emissions_most_granular.parquet"
+con = duckdb.connect()
+
+release_version = con.execute(f"SELECT DISTINCT release FROM '{parquet_path}'").fetchone()[0]
+
+# UI Header
+st.markdown(
+    f"""
+    <div style="display: flex; align-items: center;">
+        <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
+        <h1 style="margin: 0;">Climate TRACE Emissions Dashboard</h1>
+    </div>
+    <p style="margin-top: 5px; font-size: 1em; font-style: italic; color: white;">
+        The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>
+    </p>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown("<br><br>", unsafe_allow_html=True)
+
+# Scope dropdown options
+region_options = [
+    'Global', 'EU', 'OECD', 'Non-OECD',
+    'UNFCCC Annex', 'UNFCCC Non-Annex',
+    'Global North', 'Global South',
+    'Developed Markets', 'Emerging Markets',
+    'Africa', 'Antarctica', 'Asia', 'Europe',
+    'North America', 'Oceania', 'South America'
+]
+
+unique_countries = sorted(
+    row[0] for row in con.execute(
+        f"SELECT DISTINCT country_name FROM '{parquet_path}' WHERE country_name IS NOT NULL"
+    ).fetchall()
+)
+
+df_stats_all = pd.read_csv("data/statistics/country_subsector_emissions_statistics_202504.csv")
+df_stats_all = df_stats_all[df_stats_all['gas'] == 'co2e_100yr']
+
+
+raw_sectors = sorted(df_stats_all['sector'].dropna().unique().tolist())
+
+# Capitalize each word except 'and'
+def format_sector_label(sector):
+    return ' '.join([w.capitalize() if w.lower() != 'and' else 'and' for w in sector.replace('-', ' ').split()])
+
+sector_labels = [format_sector_label(s) for s in raw_sectors]
+sector_map = dict(zip(sector_labels, raw_sectors))
+sector_labels.insert(0, "All")
+sector_map["All"] = None
+
+# Subsector dropdown setup
+col1, col2, col3 = st.columns(3)
+
+# Scope dropdown
+with col1:
+    selected_scope = st.selectbox("Region", region_options + unique_countries, key="selected_scope")
+    region_condition = map_region_condition(selected_scope)
+
+# Sector dropdown
+with col2:
+    selected_sector_label = st.selectbox("Select Sector", sector_labels, key="sector_selector")
+    selected_sector_raw = sector_map.get(selected_sector_label)
+
+# Now that selected_sector_raw is defined, filter subsector options
+if selected_sector_raw:
+    subsector_subset = df_stats_all[df_stats_all['sector'] == selected_sector_raw]
+else:
+    subsector_subset = df_stats_all
+raw_subsectors = sorted(subsector_subset['subsector'].dropna().unique().tolist())
+subsector_labels, subsector_map = format_dropdown_options(raw_subsectors)
+subsector_labels.insert(0, "All")
+subsector_map["All"] = None
+
+with col3:
+    default_index = 0
+    if "selected_subsector_label" in st.session_state:
+        try:
+            default_index = subsector_labels.index(st.session_state["selected_subsector_label"])
+        except ValueError:
+            pass
+    selected_subsector_label = st.selectbox(
+        "Select Subsector", subsector_labels, index=default_index, key="selected_subsector_label"
+    )
+selected_subsector_raw = subsector_map.get(selected_subsector_label)
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+
+# Emissions columns from CSV
+emissions_columns = [col for col in df_stats_all.columns if col.startswith("emissions_quantity_")]
+emissions_columns_sorted = sorted(emissions_columns, reverse=True)
+emissions_column_latest = emissions_columns_sorted[0]
+emissions_column_prev = emissions_columns_sorted[1]
+
+# Build query for asset-level time series
+where_clauses = ["gas = 'co2e_100yr'"]
+if selected_sector_raw:
+    where_clauses.append(f"sector = '{selected_sector_raw}'")
+if selected_subsector_raw:
+    where_clauses.append(f"original_inventory_sector = '{selected_subsector_raw}'")
+if region_condition:
+    value = region_condition['column_value']
+    value_str = f"'{value}'" if isinstance(value, str) else str(value).upper()
+    where_clauses.append(f"{region_condition['column_name']} = {value_str}")
+
+
+query = f"""
+    SELECT 
+        strftime(start_time, '%Y-%m') AS year_month,
+        SUM(activity) AS activity,
+        SUM(emissions_quantity) AS emissions_quantity
+    FROM '{parquet_path}'
+    WHERE {' AND '.join(where_clauses)}
+    GROUP BY year_month
+    ORDER BY year_month
+"""
+
+monthly_df = con.execute(query).df()
+monthly_df["year_month"] = pd.to_datetime(monthly_df["year_month"])
+if not monthly_df.empty:
+    monthly_df["mean_emissions_factor"] = monthly_df["emissions_quantity"] / monthly_df["activity"]
+
+# Filter stats for table view
+if selected_sector_raw:
+    df_stats_all = df_stats_all[df_stats_all['sector'] == selected_sector_raw]
+df_stats = df_stats_all[df_stats_all['country_name'].notna()].copy()
+df_stats['country_name'] = df_stats['country_name'].replace({
+    'United States of America': 'United States',
+    'Russian Federation': 'Russia'
+})
+
+if selected_scope != 'Global':
+    if region_condition:
+        df_stats = df_stats[df_stats[region_condition['column_name']] == region_condition['column_value']]
+    else:
+        df_stats = df_stats[df_stats['country_name'] == selected_scope]
+
+if selected_subsector_raw:
+    df_stats_filtered = df_stats[df_stats['subsector'] == selected_subsector_raw]
+else:
+    df_stats_filtered = df_stats.copy()
+    if 'emissions_slope_36_months_t_per_month' in df_stats_filtered.columns:
+        df_stats_filtered['slope_times_emissions'] = (
+            df_stats_filtered['emissions_slope_36_months_t_per_month'] * df_stats_filtered[emissions_column_latest]
+        )
+        slopes = df_stats_filtered.groupby('country_name').agg({
+            'slope_times_emissions': 'sum',
+            emissions_column_latest: 'sum'
+        }).reset_index()
+        slopes['emissions_slope_36_months_t_per_month'] = slopes['slope_times_emissions'] / slopes[emissions_column_latest]
+        df_stats_agg = df_stats_filtered.groupby('country_name').agg({
+            emissions_column_latest: 'sum',
+            emissions_column_prev: 'sum',
+            'mom_change': 'sum',
+            'month_yoy_change': 'sum'
+        }).reset_index()
+        df_stats_agg['mom_percent_change'] = (df_stats_agg['mom_change'] / df_stats_agg[emissions_column_prev]) * 100
+        df_stats_agg['month_yoy_percent_change'] = (
+            df_stats_agg['month_yoy_change'] / (df_stats_agg[emissions_column_latest] - df_stats_agg['month_yoy_change'])
+        ) * 100
+        df_stats_filtered = df_stats_agg.merge(slopes[['country_name', 'emissions_slope_36_months_t_per_month']], on='country_name', how='left')
+
+# Table display setup
+df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
+df_stats_filtered = df_stats_filtered.sort_values(by='abs_mom_change', ascending=False).reset_index(drop=True)
+
+display_cols = [
+    'country_name',
+    emissions_column_prev,
+    emissions_column_latest,
+    'mom_change',
+    'mom_percent_change',
+    'month_yoy_percent_change',
+    'emissions_slope_36_months_t_per_month'
+]
+
+rename_map = {
+    emissions_column_latest: 'Emissions ' + emissions_column_latest[-6:-2] + '-' + emissions_column_latest[-2:],
+    emissions_column_prev: 'Emissions ' + emissions_column_prev[-6:-2] + '-' + emissions_column_prev[-2:],
+    'emissions_slope_36_months_t_per_month': 'Average Monthly Change (3 Year)'
+}
+
+def color_change(val):
+    return f'color: {"green" if val < 0 else "red"}'
+
+# Plotting
+st.subheader(f"Emissions Over Time - {selected_scope} | {selected_subsector_label}")
+
+# Load country-sourced emissions from CSV using DuckDB
+country_emissions_csv_path = 'data/country_subsector_emissions_totals_202504.csv'
+query_country = f'''
+    SELECT 
+        MAKE_DATE(year, month, 1) AS year_month,
+        SUM(emissions_quantity) AS country_emissions_quantity
+    FROM read_csv_auto('{country_emissions_csv_path}')
+    WHERE gas = 'co2e_100yr'
+      AND MAKE_DATE(year, month, 1) >= DATE '2022-02-01'
+      AND country_name IS NOT NULL
+      {'AND subsector = \'%s\'' % selected_subsector_raw if selected_subsector_raw else ''}
+      {'AND sector = \'%s\'' % selected_sector_raw if selected_sector_raw else ''}
+      {f"AND {region_condition['column_name']} = '{region_condition['column_value']}'" if region_condition else ''}
+    GROUP BY year_month
+    ORDER BY year_month
+'''
+
+country_df = con.execute(query_country).df()
+if not country_df.empty:
+    country_df['year_month'] = pd.to_datetime(country_df['year_month'])
+
+if not monthly_df.empty or not country_df.empty:
+    fig_emissions = px.line(title='Emissions Quantity (tCO2e)')
+    if not monthly_df.empty:
+        fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
+    if not country_df.empty:
+        fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Non-Assets')
+    st.plotly_chart(fig_emissions, use_container_width=True)
+else:
+    st.markdown(
+        """
+        <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+            <h4>No asset-level data for this subsector</h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Activity Over Time")
+    fig_placeholder1 = st.empty()
+    if selected_subsector_raw and not monthly_df.empty:
+        fig_activity = px.line(
+            monthly_df, x='year_month', y='activity', markers=True,
+            title='Shipping Activity'
+        )
+        fig_placeholder1.plotly_chart(fig_activity, use_container_width=True)
+    elif not selected_subsector_raw:
+        fig_placeholder1.markdown(
+            """
+            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+                <h4>Select a Subsector to see Activity Over Time</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        fig_placeholder1.markdown(
+            """
+            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+                <h4>No asset-level data for this subsector</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+with col2:
+    st.subheader("Emissions Factor Over Time")
+    fig_placeholder2 = st.empty()
+    if selected_subsector_raw and not monthly_df.empty:
+        fig_ef = px.line(
+            monthly_df, x='year_month', y='mean_emissions_factor', markers=True,
+            title='Emission Factor (tCO2e / unit activity)'
+        )
+        fig_placeholder2.plotly_chart(fig_ef, use_container_width=True)
+    elif not selected_subsector_raw:
+        fig_placeholder2.markdown(
+            """
+            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+                <h4>Select a Subsector to see Emission Factor Over Time</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        fig_placeholder2.markdown(
+            """
+            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+                <h4>No asset-level data for this subsector</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+
+st.markdown('**Top Movers by Absolute MoM Change (Scrollable Table)**')
+
+styled_df = (
+    df_stats_filtered[display_cols]
+    .rename(columns=rename_map)
+    .style.format({
+        rename_map[emissions_column_prev]: "{:,.0f}",
+        rename_map[emissions_column_latest]: "{:,.0f}",
+        'mom_change': "{:,.0f}",
+        'mom_percent_change': "{:.1f}%",
+        'month_yoy_percent_change': "{:.1f}%",
+        rename_map['emissions_slope_36_months_t_per_month']: "{:,.0f}"
+    })
+    .applymap(color_change, subset=['mom_change', rename_map['emissions_slope_36_months_t_per_month']])
+)
+
+st.dataframe(styled_df, use_container_width=True, height=450)
+
+con.close()
