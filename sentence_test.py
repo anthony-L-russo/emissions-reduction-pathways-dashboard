@@ -3,6 +3,7 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import base64
+from calendar import month_name
 from utils.utils import format_dropdown_options, map_region_condition
 
 st.set_page_config(layout="wide")
@@ -14,6 +15,8 @@ def get_base64_of_bin_file(bin_file_path):
     return base64.b64encode(data).decode()
 
 logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
+
+
 
 # Connect to DuckDB
 parquet_path = "data/asset_parquet/asset_emissions_most_granular.parquet"
@@ -34,7 +37,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 
 
@@ -83,10 +86,12 @@ if selected_sector_raw:
     subsector_subset = df_stats_all[df_stats_all['sector'] == selected_sector_raw]
 else:
     subsector_subset = df_stats_all
+
 raw_subsectors = sorted(subsector_subset['subsector'].dropna().unique().tolist())
 subsector_labels, subsector_map = format_dropdown_options(raw_subsectors)
 subsector_labels.insert(0, "All")
 subsector_map["All"] = None
+
 with col3:
     default_index = 0
     if "selected_subsector_label" in st.session_state:
@@ -97,8 +102,10 @@ with col3:
     selected_subsector_label = st.selectbox(
         "Select Subsector", subsector_labels, index=default_index, key="selected_subsector_label"
     )
+
 selected_subsector_raw = subsector_map.get(selected_subsector_label)
-st.markdown("<br><br>", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # Emissions columns from CSV
 df_stats_all = df_stats_all[df_stats_all['country_name'].notna()].copy()
@@ -180,28 +187,40 @@ if not df_stats_filtered.empty:
     summary_agg = df_stats_filtered.copy()
     summary_agg_row = summary_agg[[
         emissions_column_latest,
-        emissions_column_prev
+        emissions_column_prev,
+        'month_yoy_change'
     ]].sum().to_dict()
 
-    latest_month = emissions_column_latest[-6:-2] + "/" + emissions_column_latest[-2:]
+    latest_month = f"{month_name[int(emissions_column_latest[-2:])]} 20{emissions_column_latest[-4:-2]}"
     emissions_value = summary_agg_row[emissions_column_latest]
     prev_emissions_value = summary_agg_row[emissions_column_prev]
     mom_delta = ((emissions_value - prev_emissions_value) / prev_emissions_value) * 100 if prev_emissions_value != 0 else 0
 
+    yoy_change = summary_agg_row['month_yoy_change']
+    last_year_emissions = emissions_value - yoy_change
+    yoy_delta = (yoy_change / last_year_emissions) * 100 if last_year_emissions != 0 else 0
+
     mom_direction = "increase" if mom_delta > 0 else "decrease"
-    sector_text = f", {selected_sector_label}" if selected_sector_label and selected_sector_label != "All" else ""
-    subsector_text = f", {selected_subsector_label}" if selected_subsector_label and selected_subsector_label != "All" else ""
+    yoy_direction = "increase" if yoy_delta > 0 else "decrease"
     mom_color = 'red' if mom_delta > 0 else 'green'
+    yoy_color = 'red' if yoy_delta > 0 else 'green'
 
-    st.markdown(f"""
-    <p style='font-size:1.1em;'>
-        In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were {emissions_value:,.0f} tCO₂e,
-        which represents a month-over-month <span style='color:{mom_color};'>{mom_direction} of {abs(mom_delta):.1f}%</span>.
-        
-    </p>
-    """, unsafe_allow_html=True)
+    sector_text = f" {selected_sector_label}" if selected_sector_label and selected_sector_label != "All" else ""
+    subsector_text = (
+        f" ({selected_subsector_label})" if selected_sector_label and selected_sector_label != "All" and selected_subsector_label and selected_subsector_label != "All"
+        else f" {selected_subsector_label}" if selected_subsector_label and selected_subsector_label != "All"
+        else ""
+    )
 
-st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
+        f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
+        f"<span style='color:orange; font-style: italic; font-weight: bold;'>{emissions_value:,.0f} </span> tCO₂e. "
+        f"This represents a <span style='color:{mom_color}; font-style: italic; font-weight: bold;'>"
+        f"{mom_direction} of {abs(mom_delta):.1f}%</span> compared to the previous month. This also represents a <span style='color:{yoy_color}; font-style: italic; font-weight: bold;'>{yoy_direction} of {abs(yoy_delta):.1f}%</span> compared to the same month last year. "
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
 # Table display setup
 df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
@@ -226,8 +245,10 @@ rename_map = {
 def color_change(val):
     return f'color: {"green" if val < 0 else "red"}'
 
+st.markdown("<br>", unsafe_allow_html=True)
+
 # Plotting
-st.subheader(f"Emissions Over Time - {selected_scope} | {selected_subsector_label}")
+st.subheader(f"Emissions Over Time (tCO2e) - {selected_scope} | {selected_subsector_label}")
 
 # Load country-sourced emissions from CSV using DuckDB
 country_emissions_csv_path = 'data/country_subsector_emissions_totals_202504.csv'
@@ -251,7 +272,7 @@ if not country_df.empty:
     country_df['year_month'] = pd.to_datetime(country_df['year_month'])
 
 if not monthly_df.empty or not country_df.empty:
-    fig_emissions = px.line(title='Emissions Quantity (tCO2e)')
+    fig_emissions = px.line()
     if not monthly_df.empty:
         fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
     if not country_df.empty:
@@ -274,7 +295,7 @@ with col1:
     if selected_subsector_raw and not monthly_df.empty:
         fig_activity = px.line(
             monthly_df, x='year_month', y='activity', markers=True,
-            title='Shipping Activity'
+            title='Activity'
         )
         fig_placeholder1.plotly_chart(fig_activity, use_container_width=True)
     elif not selected_subsector_raw:
@@ -324,7 +345,9 @@ with col2:
             unsafe_allow_html=True
         )
 
-st.markdown('**Top Movers by Absolute MoM Change (Scrollable Table)**')
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.subheader("Top Movers by Absolute MoM Change")
 
 styled_df = (
     df_stats_filtered[display_cols]
