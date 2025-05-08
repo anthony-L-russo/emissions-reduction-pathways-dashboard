@@ -281,8 +281,13 @@ if not country_df.empty:
 
 if not monthly_df.empty or not country_df.empty:
     fig_emissions = px.line()
+    fig_emissions.update_layout(showlegend=True)
     if not monthly_df.empty:
         fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
+    else:
+        # Add empty trace to preserve Assets legend
+        fig_emissions.add_scatter(x=country_df['year_month'], y=[None] * len(country_df), mode='lines', name='Assets')
+
     if not country_df.empty:
         fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total', line=dict(color='#E9967A'))
     st.plotly_chart(fig_emissions, use_container_width=True)
