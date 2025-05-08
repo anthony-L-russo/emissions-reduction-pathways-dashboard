@@ -33,7 +33,7 @@ st.markdown(
         <h1 style="margin: 0;">Climate TRACE Emissions Dashboard</h1>
     </div>
     <p style="margin-top: 5px; font-size: 1em; font-style: italic; color: white;">
-        The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>
+        The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>. It exludes all Forestry data.
     </p>
     """,
     unsafe_allow_html=True
