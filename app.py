@@ -30,9 +30,9 @@ st.markdown(
     f"""
     <div style="display: flex; align-items: center;">
         <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
-        <h1 style="margin: 0;">Climate TRACE Emissions Dashboard</h1>
+        <h1 style="margin: 0;">Climate TRACE Monthly Dashboard</h1>
     </div>
-    <p style="margin-top: 5px; font-size: 1em; font-style: italic; color: white;">
+    <p style="margin-top: 5px; font-size: 1em; font-style: italic;">
         The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>. It exludes all Forestry data.
     </p>
     """,
@@ -76,7 +76,7 @@ sector_map["All"] = None
 # Subsector dropdown setup
 col1, col2, col3 = st.columns(3)
 with col1:
-    selected_scope = st.selectbox("Scope", region_options + unique_countries, key="selected_scope")
+    selected_scope = st.selectbox("Select a Region/Country", region_options + unique_countries, key="selected_scope")
     region_condition = map_region_condition(selected_scope)
 with col2:
     selected_sector_label = st.selectbox("Select Sector", sector_labels, key="sector_selector")
@@ -222,14 +222,14 @@ if not df_stats_filtered.empty:
     )
 
     st.markdown(
-        f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
-        f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
-        f"<span style='color:orange; font-style: italic; font-weight: bold;'>{emissions_value:,.0f} </span> tCO₂e. "
-        f"This represents a <span style='color:{mom_color}; font-style: italic; font-weight: bold;'>"
-        f"{mom_direction} of {abs(mom_delta):.1f}%</span> compared to the previous month. This also represents a <span style='color:{yoy_color}; font-style: italic; font-weight: bold;'>{yoy_direction} of {abs(yoy_delta):.1f}%</span> compared to the same month last year. "
-        f"</div>",
-        unsafe_allow_html=True
-    )
+      f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
+      f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
+      f"<span style='font-weight: bold; font-style: italic; text-decoration: underline;'>{emissions_value:,.0f}</span> tCO₂e. "
+      f"This represents a <span style='color:{mom_color}; font-style: italic; font-weight: bold;'>"
+      f"{mom_direction} of {abs(mom_delta):.1f}%</span> compared to the previous month. This also represents a <span style='color:{yoy_color}; font-style: italic; font-weight: bold;'>{yoy_direction} of {abs(yoy_delta):.1f}%</span> compared to the same month last year. "
+      f"</div>",
+    unsafe_allow_html=True
+)
 
 # Table display setup
 df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
@@ -284,7 +284,7 @@ if not monthly_df.empty or not country_df.empty:
     if not monthly_df.empty:
         fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
     if not country_df.empty:
-        fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total')
+        fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total', line=dict(color='#E9967A'))
     st.plotly_chart(fig_emissions, use_container_width=True)
 else:
     st.markdown(
