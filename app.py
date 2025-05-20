@@ -55,7 +55,7 @@ region_options = [
 
 unique_countries = sorted(
     row[0] for row in con.execute(
-        f"SELECT DISTINCT country_name FROM '{asset_path}' WHERE country_name IS NOT NULL"
+        f"SELECT DISTINCT country_name FROM '{country_subsector_totals_path}' WHERE country_name IS NOT NULL"
     ).fetchall()
 )
 
@@ -107,23 +107,36 @@ selected_subsector_raw = subsector_map.get(selected_subsector_label)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Emissions columns from CSV
+# Emissions columns from parquet
 df_stats_all = df_stats_all[df_stats_all['country_name'].notna()].copy()
 emissions_columns = [col for col in df_stats_all.columns if col.startswith("emissions_quantity_")]
 emissions_columns_sorted = sorted(emissions_columns, reverse=True)
 emissions_column_latest = emissions_columns_sorted[0]
 emissions_column_prev = emissions_columns_sorted[1]
 
+country_name_map_asset = {
+    "United States": "United States of America"
+}
+asset_scope = country_name_map_asset.get(selected_scope, selected_scope)
+
 # Build query for asset-level time series
 where_clauses = ["gas = 'co2e_100yr'"]
+# Sector/Subsector filters
 if selected_sector_raw:
     where_clauses.append(f"sector = '{selected_sector_raw}'")
 if selected_subsector_raw:
     where_clauses.append(f"original_inventory_sector = '{selected_subsector_raw}'")
+
 if region_condition:
-    value = region_condition['column_value']
-    value_str = f"'{value}'" if isinstance(value, str) else str(value).upper()
-    where_clauses.append(f"{region_condition['column_name']} = {value_str}")
+    col = region_condition['column_name']
+    val = region_condition['column_value']
+
+    # Special handling if it's actually a country filter
+    if col == "country_name" and val in ("United States", "United States of America"):
+        where_clauses.append("country_name IN ('United States', 'United States of America')")
+    else:
+        val_str = f"'{val}'" if isinstance(val, str) else str(val).upper()
+        where_clauses.append(f"{col} = {val_str}")
 
 
 query = f"""
@@ -146,6 +159,7 @@ query = f"""
     GROUP BY year_month
     ORDER BY year_month
 """
+print(query)
 
 monthly_df = con.execute(query).df()
 monthly_df["year_month"] = pd.to_datetime(monthly_df["year_month"])
@@ -380,18 +394,14 @@ styled_df = (
 st.dataframe(styled_df, use_container_width=True, height=450)
 
 
-# Lines 385 to 426 are for the annual-sector stacked bar chart
-
+# the code chunk to the end is for subsector stacked bar chart/
 st.markdown("<br>", unsafe_allow_html=True)
 st.subheader("Annual Emissions by Sector")
-
-# Path to the dataset
-country_subsector_totals_path = "data/country_subsector_emissions_totals_202504.parquet"
 
 # Optional name normalization for country dropdown
 country_name_map = {
     "United States of America": "United States",
-    "Russia": "Russian Federation"
+    #"Russia": "Russian Federation"
 }
 raw_country = country_name_map.get(selected_scope, selected_scope)
 
@@ -461,10 +471,5 @@ else:
         """,
         unsafe_allow_html=True
     )
-
-
-
-
-
 
 con.close()
