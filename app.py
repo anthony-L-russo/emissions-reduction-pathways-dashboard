@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 from calendar import month_name
-from utils.utils import format_dropdown_options, map_region_condition
+from utils.utils import format_dropdown_options, map_region_condition, format_number_short
 
 st.set_page_config(layout="wide")
 
@@ -436,6 +436,11 @@ df_annual["year"] = df_annual["year"].astype(str)
 
 # Plot the results
 if not df_annual.empty:
+
+    df_totals = df_annual.groupby("year", as_index=False).agg(
+        total_emissions=("emissions_quantity", "sum")
+    )
+
     # Ensure year is treated as categorical
     df_annual["year"] = df_annual["year"].astype(str)
 
@@ -459,6 +464,20 @@ if not df_annual.empty:
         legend_title="Sector",
         margin=dict(t=50, b=30)
     )
+
+    fig_annual.add_trace(
+    go.Bar(
+        x=df_totals["year"],
+        y=[0] * len(df_totals),  # Invisible bars
+        text=[format_number_short(v) for v in df_totals["total_emissions"]],
+        textposition="outside",
+        marker=dict(color="rgba(0,0,0,0)"),
+        showlegend=False,
+        hoverinfo="skip",
+        cliponaxis=False,
+        name="Total"
+    )
+)
 
     st.plotly_chart(fig_annual, use_container_width=True)
 

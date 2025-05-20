@@ -91,3 +91,14 @@ def map_region_condition(region_selection):
             'column_name': 'country_name',
             'column_value': region_selection
         }
+    
+
+def format_number_short(n):
+    if abs(n) >= 1_000_000_000:
+        return f"{n / 1e9:.2f}B"
+    elif abs(n) >= 1_000_000:
+        return f"{n / 1e6:.2f}M"
+    elif abs(n) >= 1_000:
+        return f"{n / 1e3:.0f}K"
+    else:
+        return f"{n:.0f}"
