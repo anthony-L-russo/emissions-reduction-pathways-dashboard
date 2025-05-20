@@ -2,6 +2,7 @@ import streamlit as st
 import duckdb
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import base64
 from calendar import month_name
 from utils.utils import format_dropdown_options, map_region_condition
@@ -17,13 +18,13 @@ def get_base64_of_bin_file(bin_file_path):
 logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
 
 # data paths
-parquet_path = "data/asset_emissions_country_subsector.parquet"
+asset_path = "data/asset_emissions_country_subsector.parquet"
 stats_path = "data/country_subsector_emissions_statistics_202504.parquet"
-country_emissions_parquet_path = 'data/country_subsector_emissions_totals_202504.parquet'
+country_subsector_totals_path = 'data/country_subsector_emissions_totals_202504.parquet'
 
 con = duckdb.connect()
 
-release_version = con.execute(f"SELECT DISTINCT release FROM '{parquet_path}'").fetchone()[0]
+release_version = con.execute(f"SELECT DISTINCT release FROM '{asset_path}'").fetchone()[0]
 
 # UI Header
 st.markdown(
@@ -54,7 +55,7 @@ region_options = [
 
 unique_countries = sorted(
     row[0] for row in con.execute(
-        f"SELECT DISTINCT country_name FROM '{parquet_path}' WHERE country_name IS NOT NULL"
+        f"SELECT DISTINCT country_name FROM '{asset_path}' WHERE country_name IS NOT NULL"
     ).fetchall()
 )
 
@@ -130,7 +131,7 @@ query = f"""
         strftime(start_time, '%Y-%m') AS year_month,
         SUM(activity) AS activity,
         SUM(emissions_quantity) AS emissions_quantity
-    FROM '{parquet_path}'
+    FROM '{asset_path}'
     WHERE {' AND '.join(where_clauses)}
         and original_inventory_sector not in ('forest-land-clearing',
                                                 'forest-land-degradation',
@@ -264,7 +265,7 @@ query_country = f'''
     SELECT 
         MAKE_DATE(year, month, 1) AS year_month,
         SUM(emissions_quantity) AS country_emissions_quantity
-    FROM '{country_emissions_parquet_path}'
+    FROM '{country_subsector_totals_path}'
     WHERE gas = 'co2e_100yr'
       AND MAKE_DATE(year, month, 1) >= DATE '2022-02-01'
       AND country_name IS NOT NULL
@@ -377,5 +378,93 @@ styled_df = (
 )
 
 st.dataframe(styled_df, use_container_width=True, height=450)
+
+
+# Lines 385 to 426 are for the annual-sector stacked bar chart
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.subheader("Annual Emissions by Sector")
+
+# Path to the dataset
+country_subsector_totals_path = "data/country_subsector_emissions_totals_202504.parquet"
+
+# Optional name normalization for country dropdown
+country_name_map = {
+    "United States of America": "United States",
+    "Russia": "Russian Federation"
+}
+raw_country = country_name_map.get(selected_scope, selected_scope)
+
+# Start building the query
+query = f"""
+    SELECT 
+        year,
+        sector,
+        SUM(emissions_quantity) AS emissions_quantity
+    FROM '{country_subsector_totals_path}'
+    WHERE gas = 'co2e_100yr'
+"""
+
+# Apply region or country filter
+if selected_scope in region_options and region_condition:
+    query += f" AND {region_condition['column_name']} = '{region_condition['column_value']}'"
+elif selected_scope != "Global":
+    query += f" AND country_name = '{raw_country}'"
+
+# Add optional sector/subsector filters
+if selected_sector_raw:
+    query += f" AND sector = '{selected_sector_raw}'"
+if selected_subsector_raw:
+    query += f" AND subsector = '{selected_subsector_raw}'"
+
+# Finalize the query
+query += " GROUP BY year, sector ORDER BY year, sector"
+
+# Run the query
+df_annual = con.execute(query).df()
+df_annual["year"] = df_annual["year"].astype(str)
+
+# Plot the results
+if not df_annual.empty:
+    # Ensure year is treated as categorical
+    df_annual["year"] = df_annual["year"].astype(str)
+
+    # Base stacked bar chart with dynamic Y scaling
+    fig_annual = px.bar(
+        df_annual,
+        x="year",
+        y="emissions_quantity",
+        color="sector",
+        labels={
+            "emissions_quantity": "Emissions (tCO₂e)",
+            "year": "Year",
+            "sector": "Sector"
+        },
+        title="Annual Total Emissions by Sector"
+    )
+
+    fig_annual.update_layout(
+        barmode="stack",
+        xaxis=dict(type="category"),
+        legend_title="Sector",
+        margin=dict(t=50, b=30)
+    )
+
+    st.plotly_chart(fig_annual, use_container_width=True)
+
+else:
+    st.markdown(
+        """
+        <div style='border: 1px solid #ccc; height: 300px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+            <h4>No data available for the selected filters</h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+
+
+
 
 con.close()
