@@ -159,6 +159,7 @@ query = f"""
     GROUP BY year_month
     ORDER BY year_month
 """
+
 print(query)
 
 monthly_df = con.execute(query).df()
@@ -454,8 +455,7 @@ if not df_annual.empty:
             "emissions_quantity": "Emissions (tCO₂e)",
             "year": "Year",
             "sector": "Sector"
-        },
-        title="Annual Total Emissions by Sector"
+        }
     )
 
     fig_annual.update_layout(
@@ -490,5 +490,7 @@ else:
         """,
         unsafe_allow_html=True
     )
+
+print(print(selected_subsector_raw))
 
 con.close()
