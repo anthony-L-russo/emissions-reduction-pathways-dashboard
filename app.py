@@ -19,8 +19,8 @@ logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
 
 # data paths
 asset_path = "data/asset_emissions_country_subsector.parquet"
-stats_path = "data/country_subsector_emissions_statistics_202504.parquet"
-country_subsector_totals_path = 'data/country_subsector_emissions_totals_202504.parquet'
+stats_path = "data/country_subsector_emissions_statistics_202505.parquet"
+country_subsector_totals_path = 'data/country_subsector_emissions_totals_202505.parquet'
 
 con = duckdb.connect()
 
@@ -160,7 +160,6 @@ query = f"""
     ORDER BY year_month
 """
 
-print(query)
 
 monthly_df = con.execute(query).df()
 monthly_df["year_month"] = pd.to_datetime(monthly_df["year_month"])
@@ -490,7 +489,5 @@ else:
         """,
         unsafe_allow_html=True
     )
-
-print(print(selected_subsector_raw))
 
 con.close()
