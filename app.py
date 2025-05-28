@@ -1,3 +1,6 @@
+# UPDATE 4: MAKE PARQUET CONVERSION SCRIPT DELETE UNDERSCORE DATE AND MAKE STATIC FILE PATH
+# UPDATE 5: ADD GRAPHS (NOTION TASK)
+
 import streamlit as st
 import duckdb
 import pandas as pd
@@ -19,7 +22,7 @@ logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
 
 # data paths
 asset_path = "data/asset_emissions_country_subsector.parquet"
-stats_path = "data/country_subsector_emissions_statistics_202505.parquet"
+country_subsector_stats_path = "data/country_subsector_emissions_statistics_202505.parquet"
 country_subsector_totals_path = 'data/country_subsector_emissions_totals_202505.parquet'
 
 con = duckdb.connect()
@@ -61,7 +64,7 @@ unique_countries = sorted(
 
 # Load and prepare statistics CSV
 
-df_stats_all = pd.read_parquet(stats_path)
+df_stats_all = pd.read_parquet(country_subsector_stats_path)
 df_stats_all = df_stats_all[df_stats_all['gas'] == 'co2e_100yr']
 
 raw_sectors = sorted(df_stats_all['sector'].dropna().unique().tolist())
@@ -215,36 +218,61 @@ if not df_stats_filtered.empty:
         'month_yoy_change'
     ]].sum().to_dict()
 
-    latest_month = f"{month_name[int(emissions_column_latest[-2:])]} 20{emissions_column_latest[-4:-2]}"
-    emissions_value = summary_agg_row[emissions_column_latest]
-    prev_emissions_value = summary_agg_row[emissions_column_prev]
-    mom_delta = ((emissions_value - prev_emissions_value) / prev_emissions_value) * 100 if prev_emissions_value != 0 else 0
 
-    yoy_change = summary_agg_row['month_yoy_change']
-    last_year_emissions = emissions_value - yoy_change
-    yoy_delta = (yoy_change / last_year_emissions) * 100 if last_year_emissions != 0 else 0
+latest_month = f"{month_name[int(emissions_column_latest[-2:])]} 20{emissions_column_latest[-4:-2]}"
+emissions_value = summary_agg_row[emissions_column_latest]
+prev_emissions_value = summary_agg_row[emissions_column_prev]
+mom_delta = ((emissions_value - prev_emissions_value) / prev_emissions_value) * 100 if prev_emissions_value != 0 else 0
 
+yoy_change = summary_agg_row['month_yoy_change']
+last_year_emissions = emissions_value - yoy_change
+yoy_delta = (yoy_change / last_year_emissions) * 100 if last_year_emissions != 0 else 0
+
+# Round to one decimal for display
+mom_delta_rounded = round(mom_delta, 1)
+yoy_delta_rounded = round(yoy_delta, 1)
+
+# Handle "no change" logic for month-over-month
+if mom_delta_rounded == 0.0:
+    mom_text = "<span style='font-style: italic; font-weight: bold;'>no change</span>"
+else:
     mom_direction = "increase" if mom_delta > 0 else "decrease"
-    yoy_direction = "increase" if yoy_delta > 0 else "decrease"
-    mom_color = 'red' if mom_delta > 0 else 'green'
-    yoy_color = 'red' if yoy_delta > 0 else 'green'
-
-    sector_text = f" {selected_sector_label}" if selected_sector_label and selected_sector_label != "All" else ""
-    subsector_text = (
-        f" ({selected_subsector_label})" if selected_sector_label and selected_sector_label != "All" and selected_subsector_label and selected_subsector_label != "All"
-        else f" {selected_subsector_label}" if selected_subsector_label and selected_subsector_label != "All"
-        else ""
+    mom_article = "an" if mom_direction[0] in "aeiou" else "a"
+    mom_color = "red" if mom_delta > 0 else "green"
+    mom_text = (
+        f"{mom_article} <span style='color:{mom_color}; font-style: italic; font-weight: bold;'>"
+        f"{mom_direction} of {abs(mom_delta_rounded):.1f}%</span>"
     )
 
-    st.markdown(
-      f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
-      f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
-      f"<span style='font-weight: bold; font-style: italic; text-decoration: underline;'>{emissions_value:,.0f}</span> tCO₂e. "
-      f"This represents a <span style='color:{mom_color}; font-style: italic; font-weight: bold;'>"
-      f"{mom_direction} of {abs(mom_delta):.1f}%</span> compared to the previous month. This also represents a <span style='color:{yoy_color}; font-style: italic; font-weight: bold;'>{yoy_direction} of {abs(yoy_delta):.1f}%</span> compared to the same month last year. "
-      f"</div>",
+# Handle "no change" logic for year-over-year
+if yoy_delta_rounded == 0.0:
+    yoy_text = "<span style='font-style: italic; font-weight: bold;'>no change</span>"
+else:
+    yoy_direction = "increase" if yoy_delta > 0 else "decrease"
+    yoy_article = "an" if yoy_direction[0] in "aeiou" else "a"
+    yoy_color = "red" if yoy_delta > 0 else "green"
+    yoy_text = (
+        f"{yoy_article} <span style='color:{yoy_color}; font-style: italic; font-weight: bold;'>"
+        f"{yoy_direction} of {abs(yoy_delta_rounded):.1f}%</span>"
+    )
+
+sector_text = f" {selected_sector_label}" if selected_sector_label and selected_sector_label != "All" else ""
+subsector_text = (
+    f" ({selected_subsector_label})" if selected_sector_label and selected_sector_label != "All" and selected_subsector_label and selected_subsector_label != "All"
+    else f" {selected_subsector_label}" if selected_subsector_label and selected_subsector_label != "All"
+    else ""
+)
+
+st.markdown(
+    f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
+    f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
+    f"<span style='font-weight: bold; font-style: italic; text-decoration: underline;'>{emissions_value:,.0f}</span> tCO₂e. "
+    f"This represents {mom_text} compared to the previous month. This also represents {yoy_text} compared to the same month last year."
+    f"</div>",
     unsafe_allow_html=True
 )
+
+
 
 # Table display setup
 df_stats_filtered['abs_mom_change'] = df_stats_filtered['mom_change'].abs()
@@ -274,21 +302,26 @@ st.markdown("<br>", unsafe_allow_html=True)
 # Plotting
 st.subheader(f"Emissions Over Time (tCO2e) - {selected_scope} | {selected_subsector_label}")
 
-# for country total emissions on emissions plot
-query_country = f'''
+query_country = f"""
+    WITH latest_month AS (
+        SELECT MAX(MAKE_DATE(year, month, 1)) AS max_date
+        FROM '{country_subsector_totals_path}'
+        WHERE gas = 'co2e_100yr'
+          AND country_name IS NOT NULL
+    )
     SELECT 
         MAKE_DATE(year, month, 1) AS year_month,
         SUM(emissions_quantity) AS country_emissions_quantity
-    FROM '{country_subsector_totals_path}'
+    FROM '{country_subsector_totals_path}', latest_month
     WHERE gas = 'co2e_100yr'
-      AND MAKE_DATE(year, month, 1) >= DATE '2022-02-01'
       AND country_name IS NOT NULL
+      AND MAKE_DATE(year, month, 1) >= (max_date - INTERVAL '36' MONTH)
       {'AND subsector = \'%s\'' % selected_subsector_raw if selected_subsector_raw else ''}
       {'AND sector = \'%s\'' % selected_sector_raw if selected_sector_raw else ''}
       {f"AND {region_condition['column_name']} = '{region_condition['column_value']}'" if region_condition else ''}
     GROUP BY year_month
     ORDER BY year_month
-'''
+"""
 
 country_df = con.execute(query_country).df()
 if not country_df.empty:
