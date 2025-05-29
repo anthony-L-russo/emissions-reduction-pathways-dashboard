@@ -1,3 +1,6 @@
+import pandas as pd
+import io
+
 def format_dropdown_options(raw_values, lowercase_words=None):
     if lowercase_words is None:
         lowercase_words = {"and"}
@@ -102,3 +105,15 @@ def format_number_short(n):
         return f"{n / 1e3:.0f}K"
     else:
         return f"{n:.0f}"
+    
+
+def create_excel_file(dataframes_dict):
+    
+    output = io.BytesIO()
+
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        for sheet_name, df in dataframes_dict.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    output.seek(0)
+    return output

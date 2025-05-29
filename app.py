@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 from calendar import month_name
-from utils.utils import format_dropdown_options, map_region_condition, format_number_short
+from utils.utils import format_dropdown_options, map_region_condition, format_number_short, create_excel_file
 
 st.set_page_config(layout="wide")
 
@@ -30,20 +30,42 @@ con = duckdb.connect()
 release_version = con.execute(f"SELECT DISTINCT release FROM '{asset_path}'").fetchone()[0]
 
 # UI Header
-st.markdown(
-    f"""
-    <div style="display: flex; align-items: center;">
-        <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
-        <h1 style="margin: 0;">Climate TRACE Monthly Dashboard</h1>
-    </div>
-    <p style="margin-top: 5px; font-size: 1em; font-style: italic;">
-        The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>. It exludes all Forestry data.
-    </p>
-    """,
-    unsafe_allow_html=True
-)
-st.markdown("<br>", unsafe_allow_html=True)
+# st.markdown(
+#     f"""
+#     <div style="display: flex; align-items: center;">
+#         <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
+#         <h1 style="margin: 0;">Climate TRACE Monthly Dashboard</h1>
+#     </div>
+#     <p style="margin-top: 5px; font-size: 1em; font-style: italic;">
+#         The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong> {release_version}</strong></span>. It exludes all Forestry data.
+#     </p>
+#     """,
+#     unsafe_allow_html=True
+# )
+# st.markdown("<br>", unsafe_allow_html=True)
 
+col1, col2 = st.columns([10, 1])
+
+with col1:
+    st.markdown(
+        f"""
+        <div style='display: flex; align-items: center;'>
+            <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
+            <h1 style="margin: 0; font-size: 2.8em;">Climate TRACE Monthly Dashboard</h1>
+        </div>
+        <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
+            The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong>{release_version}</strong></span>. It excludes all Forestry data.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    download_placeholder = st.empty()
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 
 # Scope dropdown options
@@ -521,6 +543,26 @@ else:
         </div>
         """,
         unsafe_allow_html=True
+    )
+
+if not monthly_df.empty or not country_df.empty or not df_stats_filtered.empty or not df_annual.empty:
+    # Create dictionary of DataFrames to export
+    dfs_for_excel = {
+        "Country Total Emissions": country_df,
+        "Asset Total Emissions": monthly_df,
+        "Stats Data": df_stats_filtered,
+        "Annual Sector Emissions": df_annual
+    }
+
+    # Use the utility function to create the Excel file
+    excel_file = create_excel_file(dfs_for_excel)
+
+    # Fill in the placeholder with the actual download button
+    download_placeholder.download_button(
+        label="Download Data",
+        data=excel_file,
+        file_name="climate_trace_dashboard_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 con.close()
