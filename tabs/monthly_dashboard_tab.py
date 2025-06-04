@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import base64
 from calendar import month_name
 import calendar
-from utils.utils import format_dropdown_options, map_region_condition, format_number_short, create_excel_file
+from utils.utils import format_dropdown_options, map_region_condition, format_number_short, create_excel_file, bordered_metric
 from config import CONFIG
 
 
@@ -260,6 +260,7 @@ def show_monthly_dashboard():
     yoy_delta_rounded = round(yoy_delta, 1)
 
     # Handle "no change" logic for month-over-month
+    mom_color = None
     if mom_delta_rounded == 0.0:
         mom_text = "<span style='font-style: italic; font-weight: bold;'>no change</span>"
     else:
@@ -272,6 +273,7 @@ def show_monthly_dashboard():
         )
 
     # Handle "no change" logic for year-over-year
+    yoy_color = None
     if yoy_delta_rounded == 0.0:
         yoy_text = "<span style='font-style: italic; font-weight: bold;'>no change</span>"
     else:
@@ -305,136 +307,42 @@ def show_monthly_dashboard():
     
     # ----------------------- Summary Cards -----------------------
     
-
-    def bordered_metric(label, value):
-        st.markdown(
-            f"""
-            <div style="
-                border: 1px solid #999;
-                border-radius: 10px;
-                padding: 16px;
-                margin-bottom: 12px;
-                min-height: 160px;
-                display: flex;
-                flex-direction: column;
-            ">
-                <div style="
-                    font-weight: 600;
-                    text-align: left;
-                    margin-bottom: -18px;
-                    margin-top: -4px;
-                    padding: 0;
-                ">
-                    {label}
-                </div>
-                <div style="
-                    flex-grow: 1;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 1.5em;
-                    font-weight: bold;
-                ">
-                    {value}
-                </div>
-            </div>
-            """,
-        unsafe_allow_html=True
-    )
-
-    # Example usage
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        bordered_metric("Selected Regions", "Coming Soon")
+        bordered_metric("Selected Region", selected_scope)
 
     with col2:
-        bordered_metric("Selected Subsectors", "Coming Soon")
+        if selected_subsector_label:
+            display_value = selected_subsector_label
+            tooltip_value = ", ".join(selected_subsector_label)
+        else:
+            display_value = f"All ({len(subsector_labels)})"
+            tooltip_value = ", ".join(subsector_labels)
+
+        bordered_metric("Selected Subsectors", display_value, tooltip_enabled=True, tooltip_value=tooltip_value)
 
     with col3:
-        bordered_metric("Total Emissions tCO2e", "Coming Soon")
+        bordered_metric("Total Emissions tCO2e", format_number_short(emissions_value), value_color="red")
 
     with col4:
-        bordered_metric("MoM Change (%)", "Coming Soon")
+        if mom_delta == 0.0:
+            arrow = ""
+        elif mom_delta > 0.0:
+            arrow = "🔼"
+        else:
+            arrow = "🔽"
+
+        bordered_metric("MoM Change (%)", f'''{arrow} {abs(mom_delta_rounded):.1f}%''', value_color=mom_color)
 
     with col5:
-        bordered_metric("YoY Change (%)", "Coming Soon")
-
-
-    # col1, col2, col3, col4, col5 = st.columns(5)
-
-    # with col1:
-    #     st.metric(label="Selected Regions", value="Coming Soon")
-
-    # with col2:
-    #     st.metric(label="Selected Subsectors", value="Coming Soon")
-
-    # with col3:
-    #     st.metric(label="Total Emissions tCO2e", value="Coming Soon")
-
-    # with col4:
-    #     st.metric(label="MoM Change (%)", value="Coming Soon")
-
-    # with col5:
-    #     st.metric(label="YoY Change (%)", value="Coming Soon")
-    
-    
-    
-    # card_css = """
-    #     <style>
-    #     .card {
-    #         border: 1px solid #ccc;
-    #         border-radius: 8px;
-    #         padding: 16px;
-    #         text-align: left;
-    #         box-shadow: 1px 1px 4px rgba(0,0,0,0.1);
-    #         margin-bottom: 10px;
-    #     }
-    #     .card h4 {
-    #         font-size: 16px;
-    #         margin-bottom: 6px;
-    #         color: inherit;
-    #     }
-    #     .card p {
-    #         font-size: 18px;
-    #         font-weight: bold;
-    #         margin-top: 0;
-    #         text-align: center;
-    #     }
-    #     @media (prefers-color-scheme: dark) {
-    #         .card {
-    #             background-color: #1e1e1e;
-    #             color: white;
-    #             border: 1px solid #555;
-    #         }
-    #     }
-    #     @media (prefers-color-scheme: light) {
-    #         .card {
-    #             background-color: #f9f9f9;
-    #             color: black;
-    #         }
-    #     }
-    #     </style>
-    # """
-
-    # st.markdown(card_css, unsafe_allow_html=True)
-
-    # card_template = """
-    # <div class="card">
-    #     <h4>{title}</h4>
-    #     <p style="font-size: 20px; font-weight: bold;">{value}</p>
-    # </div>
-    # """
-
-    # cols = st.columns(5)
-    # titles = [
-    #     "Selected Regions", "Selected Subsectors", "Total Emissions tCO2e", 
-    #     "MoM Change (%)", "YoY Change (%)"
-    # ]
-
-    # for col, title in zip(cols, titles):
-    #     with col:
-    #         st.markdown(card_template.format(title=title, value="Coming Soon"), unsafe_allow_html=True)
+        if yoy_delta_rounded == 0.0:
+            arrow = ""
+        elif yoy_delta > 0.0:
+            arrow = "🔼"
+        else:
+            arrow = "🔽"
+        bordered_metric("YoY Change (%)", f'''{arrow} {abs(yoy_delta_rounded)}%''', value_color=yoy_color)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -597,22 +505,103 @@ def show_monthly_dashboard():
         ORDER BY year_month
     """
 
+    # --------------- Emissions Chart ---------------
+    # country_df = con.execute(query_country).df()
+    # if not country_df.empty:
+    #     country_df['year_month'] = pd.to_datetime(country_df['year_month'])
+
+    # if not monthly_df.empty or not country_df.empty:
+    #     fig_emissions = px.line()
+    #     fig_emissions.update_layout(showlegend=True)
+    #     if not monthly_df.empty:
+    #         fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
+    #     else:
+    #         # Add empty trace to preserve Assets legend
+    #         fig_emissions.add_scatter(x=country_df['year_month'], y=[None] * len(country_df), mode='lines', name='Assets')
+
+    #     if not country_df.empty:
+    #         fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total', line=dict(color='#E9967A'))
+    #     st.plotly_chart(fig_emissions, use_container_width=True)
+    # else:
+    #     st.markdown(
+    #         """
+    #         <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+    #             <h4>No asset-level data for this subsector</h4>
+    #         </div>
+    #         """,
+    #         unsafe_allow_html=True
+    #     )
+
     country_df = con.execute(query_country).df()
+
+    # Parse dates
     if not country_df.empty:
         country_df['year_month'] = pd.to_datetime(country_df['year_month'])
 
+    # Only continue if there's data
     if not monthly_df.empty or not country_df.empty:
         fig_emissions = px.line()
         fig_emissions.update_layout(showlegend=True)
-        if not monthly_df.empty:
-            fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
-        else:
-            # Add empty trace to preserve Assets legend
-            fig_emissions.add_scatter(x=country_df['year_month'], y=[None] * len(country_df), mode='lines', name='Assets')
 
+        # Assets line
+        if not monthly_df.empty:
+            fig_emissions.add_scatter(
+                x=monthly_df['year_month'],
+                y=monthly_df['emissions_quantity'],
+                mode='lines+markers',
+                name='Assets'
+            )
+        else:
+            fig_emissions.add_scatter(
+                x=country_df['year_month'],
+                y=[None] * len(country_df),
+                mode='lines',
+                name='Assets'
+            )
+
+        # Country line
         if not country_df.empty:
-            fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total', line=dict(color='#E9967A'))
+            fig_emissions.add_scatter(
+                x=country_df['year_month'],
+                y=country_df['country_emissions_quantity'],
+                mode='lines+markers',
+                name='Total',
+                line=dict(color='#E9967A')
+            )
+
+            min_date = country_df['year_month'].min()
+            max_date = country_df['year_month'].max()
+
+            quarter_starts = pd.date_range(
+                start=min_date.to_period("Q").start_time,
+                end=max_date.to_period("Q").end_time + pd.offsets.QuarterBegin(1),
+                freq='QS'
+            )
+
+            for q_start in quarter_starts:
+                fig_emissions.add_vline(
+                    x=q_start.to_pydatetime(),
+                    line_width=2,
+                    line_dash='dash',
+                    line_color='white',
+                    opacity=0.5
+                )
+
+                # Optional: Add custom label manually
+                quarter = (q_start.month - 1) // 3 + 1
+                fig_emissions.add_annotation(
+                    x=q_start.to_pydatetime(),
+                    y=1.02,  # place it just above the plot
+                    xref="x",
+                    yref="paper",
+                    text=f"Q{quarter} {q_start.year}",
+                    showarrow=False,
+                    font=dict(size=10, color="white"),
+                    align="center"
+                )
+
         st.plotly_chart(fig_emissions, use_container_width=True)
+
     else:
         st.markdown(
             """
@@ -622,6 +611,7 @@ def show_monthly_dashboard():
             """,
             unsafe_allow_html=True
         )
+
 
     # --------------- Activity Chart ---------------
     st.subheader("Activity Over Time")
@@ -704,103 +694,7 @@ def show_monthly_dashboard():
 
     # the code chunk to the end is for subsector stacked bar chart/
     st.markdown("<br>", unsafe_allow_html=True)
-    # st.subheader("Annual Emissions by Sector")
 
-    # # Optional name normalization for country dropdown
-    # country_name_map = {
-    #     "United States of America": "United States",
-    #     #"Russia": "Russian Federation"
-    # }
-    # raw_country = country_name_map.get(selected_scope, selected_scope)
-
-    # # Start building the query
-    # query = f"""
-    #     SELECT 
-    #         year,
-    #         sector,
-    #         SUM(emissions_quantity) AS emissions_quantity
-    #     FROM '{country_subsector_totals_path}'
-    #     WHERE gas = 'co2e_100yr'
-    # """
-
-    # # Apply region or country filter
-    # if selected_scope in region_options and region_condition:
-    #     query += f" AND {region_condition['column_name']} = '{region_condition['column_value']}'"
-    # elif selected_scope != "Global":
-    #     query += f" AND country_name = '{raw_country}'"
-
-    # # Add optional sector/subsector filters
-    # if selected_sector_raw:
-    #     query += f" AND sector = '{selected_sector_raw}'"
-    # if selected_subsector_raw:
-    #     if len(selected_subsector_raw) == 1:
-    #         query += f" AND subsector = '{selected_subsector_raw[0]}'"
-    #     else:
-    #         formatted_subsectors = ",".join([f"'{sub}'" for sub in selected_subsector_raw])
-    #         query += f" AND subsector IN ({formatted_subsectors})"
-
-    # # Finalize the query
-    # query += " GROUP BY year, sector ORDER BY year, sector"
-
-    # # Run the query
-    # df_annual = con.execute(query).df()
-    # df_annual["year"] = df_annual["year"].astype(str)
-
-    # # Plot the results
-    # if not df_annual.empty:
-
-    #     df_totals = df_annual.groupby("year", as_index=False).agg(
-    #         total_emissions=("emissions_quantity", "sum")
-    #     )
-
-    #     # Ensure year is treated as categorical
-    #     df_annual["year"] = df_annual["year"].astype(str)
-
-    #     # Base stacked bar chart with dynamic Y scaling
-    #     fig_annual = px.bar(
-    #         df_annual,
-    #         x="year",
-    #         y="emissions_quantity",
-    #         color="sector",
-    #         labels={
-    #             "emissions_quantity": "Emissions (tCO₂e)",
-    #             "year": "Year",
-    #             "sector": "Sector"
-    #         }
-    #     )
-
-    #     fig_annual.update_layout(
-    #         barmode="stack",
-    #         xaxis=dict(type="category"),
-    #         legend_title="Sector",
-    #         margin=dict(t=50, b=30)
-    #     )
-
-    #     fig_annual.add_trace(
-    #     go.Bar(
-    #         x=df_totals["year"],
-    #         y=[0] * len(df_totals),  # Invisible bars
-    #         text=[format_number_short(v) for v in df_totals["total_emissions"]],
-    #         textposition="outside",
-    #         marker=dict(color="rgba(0,0,0,0)"),
-    #         showlegend=False,
-    #         hoverinfo="skip",
-    #         cliponaxis=False,
-    #         name="Total"
-    #     )
-    # )
-
-    #     st.plotly_chart(fig_annual, use_container_width=True)
-
-    # else:
-    #     st.markdown(
-    #         """
-    #         <div style='border: 1px solid #ccc; height: 300px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-    #             <h4>No data available for the selected filters</h4>
-    #         </div>
-    #         """,
-    #         unsafe_allow_html=True
-    #     )
 
     # --------------- Cumulative Emissions Chart ----------------
     if not country_df.empty:
