@@ -1,5 +1,7 @@
 import pandas as pd
 import io
+# import duckdb
+# from config import CONFIG
 
 def format_dropdown_options(raw_values, lowercase_words=None):
     if lowercase_words is None:
@@ -12,7 +14,7 @@ def format_dropdown_options(raw_values, lowercase_words=None):
             for word in words
         ])
 
-    # Generate labels and check for duplicates
+    # generate labels and check for duplicates
     seen = {}
     options = []
     mapping = {}
@@ -117,3 +119,10 @@ def create_excel_file(dataframes_dict):
     
     output.seek(0)
     return output
+
+def get_release_version(con, path):
+    
+    release_version = con.execute(f"SELECT DISTINCT release FROM '{path}'").fetchone()[0]
+    con.close()
+
+    return release_version
