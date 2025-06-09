@@ -1,5 +1,4 @@
 # UPDATE 4: MAKE PARQUET CONVERSION SCRIPT DELETE UNDERSCORE DATE AND MAKE STATIC FILE PATH
-# UPDATE 5: ADD GRAPHS (NOTION TASK)
 
 import streamlit as st
 import duckdb
@@ -314,14 +313,58 @@ def show_monthly_dashboard():
         bordered_metric("Selected Region", selected_scope)
 
     with col2:
-        if selected_subsector_label:
-            display_value = selected_subsector_label
-            tooltip_value = ", ".join(selected_subsector_label)
-        else:
-            display_value = f"All ({len(subsector_labels)})"
-            tooltip_value = ", ".join(subsector_labels)
+        # Cleaned dropdown lists (exclude "All")
+        total_sectors = [s for s in sector_labels if s != "All"]
+        total_subsectors = [s for s in subsector_labels if s != "All"]
 
-        bordered_metric("Selected Subsectors", display_value, tooltip_enabled=True, tooltip_value=tooltip_value)
+        # Invert subsector map: get raw subsector name from label
+        label_to_raw_subsector = {label: raw for label, raw in subsector_map.items()}
+
+        # Map raw subsectors to sectors using df_stats_all
+        subsector_to_sector = df_stats_all.dropna(subset=["subsector", "sector"]) \
+            .drop_duplicates(subset=["subsector"]) \
+            .set_index("subsector")["sector"].to_dict()
+
+        # Get cleaned user selections
+        selected_sector_clean = [selected_sector_label] if selected_sector_label and selected_sector_label != "All" else []
+        selected_subsector_clean = [s for s in selected_subsector_label if s != "All"] if selected_subsector_label else []
+
+        # Count logic
+        if selected_subsector_clean:
+            selected_raw_subsectors = [label_to_raw_subsector[s] for s in selected_subsector_clean if s in label_to_raw_subsector]
+            inferred_sectors = set(subsector_to_sector[sub] for sub in selected_raw_subsectors if sub in subsector_to_sector)
+            num_selected_sectors = len(inferred_sectors)
+            num_selected_subsectors = len(selected_subsector_clean)
+            tooltip_value = ", ".join(selected_subsector_clean)
+        else:
+            if selected_sector_clean:
+                # Filter raw subsectors in df_stats_all by selected sectors
+                filtered_raw_subsectors = df_stats_all[
+                    df_stats_all["sector"].isin([sector_map[s] for s in selected_sector_clean])
+                ]["subsector"].dropna().unique().tolist()
+
+                # Convert to display labels
+                filtered_subsector_labels = [
+                    label for label, raw in subsector_map.items() if raw in filtered_raw_subsectors
+                ]
+
+                num_selected_subsectors = len(filtered_subsector_labels)
+                num_selected_sectors = len(selected_sector_clean)
+                tooltip_value = ", ".join(filtered_subsector_labels)
+            else:
+                num_selected_sectors = len(total_sectors)
+                num_selected_subsectors = len(total_subsectors)
+                tooltip_value = ", ".join(total_subsectors)
+
+        display_value = f"{num_selected_sectors} Sectors<br>{num_selected_subsectors} Subsectors"
+
+        bordered_metric(
+            "Selected Sectors & Subsectors",
+            display_value,
+            tooltip_enabled=True,
+            tooltip_value=tooltip_value,
+            font_size="1.5em"
+        )
 
     with col3:
         bordered_metric("Total Emissions tCO2e", format_number_short(emissions_value), value_color="red")

@@ -137,7 +137,8 @@ def bordered_metric(
     tooltip_enabled=False, 
     total_options_in_scope=None, 
     tooltip_value=None, 
-    value_color=None
+    value_color=None,
+    font_size="2em"
 ):
     # Format the display value
     if isinstance(value, list):
@@ -158,14 +159,14 @@ def bordered_metric(
         tooltip = tooltip_value if tooltip_value else display_val
 
     # Escape all text to avoid breaking markup
-    display_val = html.escape(display_val)
+    # display_val = html.escape(display_val)
     tooltip = html.escape(tooltip)
     label = html.escape(label)
 
     # Build style dynamically
     base_style = (
-        "flex-grow: 1; display: flex; align-items: center; justify-content: center; "
-        "font-size: 2em; font-weight: bold; text-align: center; padding: 0 4px;"
+        "flex-grow: 1; display: flex; align-items: center; justify-content: center;"
+        f"font-size: {font_size}; font-weight: bold; text-align: center; padding: 0 4px;"
     )
     if value_color:
         base_style += f" color: {value_color};"
