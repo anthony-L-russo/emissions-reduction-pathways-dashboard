@@ -6,6 +6,7 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import base64
 from calendar import month_name
 import calendar
@@ -505,171 +506,128 @@ def show_monthly_dashboard():
         ORDER BY year_month
     """
 
-    # --------------- Emissions Chart ---------------
-    # country_df = con.execute(query_country).df()
-    # if not country_df.empty:
-    #     country_df['year_month'] = pd.to_datetime(country_df['year_month'])
-
-    # if not monthly_df.empty or not country_df.empty:
-    #     fig_emissions = px.line()
-    #     fig_emissions.update_layout(showlegend=True)
-    #     if not monthly_df.empty:
-    #         fig_emissions.add_scatter(x=monthly_df['year_month'], y=monthly_df['emissions_quantity'], mode='lines+markers', name='Assets')
-    #     else:
-    #         # Add empty trace to preserve Assets legend
-    #         fig_emissions.add_scatter(x=country_df['year_month'], y=[None] * len(country_df), mode='lines', name='Assets')
-
-    #     if not country_df.empty:
-    #         fig_emissions.add_scatter(x=country_df['year_month'], y=country_df['country_emissions_quantity'], mode='lines+markers', name='Total', line=dict(color='#E9967A'))
-    #     st.plotly_chart(fig_emissions, use_container_width=True)
-    # else:
-    #     st.markdown(
-    #         """
-    #         <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-    #             <h4>No asset-level data for this subsector</h4>
-    #         </div>
-    #         """,
-    #         unsafe_allow_html=True
-    #     )
+    # --------------- Emissions Line Charts ---------------
 
     country_df = con.execute(query_country).df()
 
-    # Parse dates
     if not country_df.empty:
         country_df['year_month'] = pd.to_datetime(country_df['year_month'])
 
-    # Only continue if there's data
-    if not monthly_df.empty or not country_df.empty:
-        fig_emissions = px.line()
-        fig_emissions.update_layout(showlegend=True)
+    # Check which charts should be shown
+    show_activity_and_ef = selected_subsector_raw and not monthly_df.empty
 
-        # Assets line
-        if not monthly_df.empty:
-            fig_emissions.add_scatter(
+    # Dynamic row/height logic
+    num_rows = 3 if show_activity_and_ef else 1
+    subplot_titles = ["Emissions Over Time"]
+    if show_activity_and_ef:
+        subplot_titles += ["Activity Over Time", "Emission Factor Over Time"]
+
+    # Create subplot figure
+    fig_combined = make_subplots(
+        rows=num_rows,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.05,
+        subplot_titles=subplot_titles
+    )
+
+    # Row 1 — Emissions
+    if not monthly_df.empty:
+        fig_combined.add_trace(
+            go.Scatter(
                 x=monthly_df['year_month'],
                 y=monthly_df['emissions_quantity'],
                 mode='lines+markers',
                 name='Assets'
-            )
-        else:
-            fig_emissions.add_scatter(
-                x=country_df['year_month'],
-                y=[None] * len(country_df),
-                mode='lines',
-                name='Assets'
-            )
+            ),
+            row=1, col=1
+        )
 
-        # Country line
-        if not country_df.empty:
-            fig_emissions.add_scatter(
+    if not country_df.empty:
+        fig_combined.add_trace(
+            go.Scatter(
                 x=country_df['year_month'],
                 y=country_df['country_emissions_quantity'],
                 mode='lines+markers',
                 name='Total',
                 line=dict(color='#E9967A')
+            ),
+            row=1, col=1
+        )
+
+        # Add vertical quarter lines across all rows
+        min_date = country_df['year_month'].min()
+        max_date = country_df['year_month'].max()
+        quarter_starts = pd.date_range(
+            start=min_date.to_period("Q").start_time,
+            end=max_date.to_period("Q").end_time + pd.offsets.QuarterBegin(1),
+            freq='QS'
+        )
+
+    # Row 2 — Activity
+    if show_activity_and_ef:
+        fig_combined.add_trace(
+            go.Scatter(
+                x=monthly_df['year_month'],
+                y=monthly_df['activity'],
+                mode='lines+markers',
+                name='Activity'
+            ),
+            row=2, col=1
+        )
+
+    # Row 3 — Emissions Factor
+    if show_activity_and_ef:
+        fig_combined.add_trace(
+            go.Scatter(
+                x=monthly_df['year_month'],
+                y=monthly_df['mean_emissions_factor'],
+                mode='lines+markers',
+                name='Emission Factor'
+            ),
+            row=3, col=1
+        )
+
+    for q_start in quarter_starts:
+            # Just once — this applies to all subplots when x-axis is shared
+            fig_combined.add_vline(
+                x=q_start,
+                line_width=1,
+                line_dash='dash',
+                line_color='gray'
             )
 
-            min_date = country_df['year_month'].min()
-            max_date = country_df['year_month'].max()
-
-            quarter_starts = pd.date_range(
-                start=min_date.to_period("Q").start_time,
-                end=max_date.to_period("Q").end_time + pd.offsets.QuarterBegin(1),
-                freq='QS'
+            # Add label only once (above row 1)
+            fig_combined.add_annotation(
+                x=q_start,
+                y=1.01,
+                xref="x",
+                yref="paper",
+                text=f"Q{((q_start.month - 1) // 3 + 1)} {q_start.year}",
+                showarrow=False,
+                font=dict(size=9),
+                align="center"
             )
 
-            for q_start in quarter_starts:
-                fig_emissions.add_vline(
-                    x=q_start.to_pydatetime(),
-                    line_width=2,
-                    line_dash='dash',
-                    line_color='white',
-                    opacity=0.5
-                )
+    # Layout adjustments
+    fig_combined.update_layout(
+        height=900 if show_activity_and_ef else 400,
+        #title_text="Emissions Dashboard",
+        showlegend=True,
+        margin=dict(t=80, b=40)
+    )
 
-                # Optional: Add custom label manually
-                quarter = (q_start.month - 1) // 3 + 1
-                fig_emissions.add_annotation(
-                    x=q_start.to_pydatetime(),
-                    y=1.02,  # place it just above the plot
-                    xref="x",
-                    yref="paper",
-                    text=f"Q{quarter} {q_start.year}",
-                    showarrow=False,
-                    font=dict(size=10, color="white"),
-                    align="center"
-                )
+    st.plotly_chart(fig_combined, use_container_width=True)
 
-        st.plotly_chart(fig_emissions, use_container_width=True)
-
-    else:
-        st.markdown(
-            """
-            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-                <h4>No asset-level data for this subsector</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-
-    # --------------- Activity Chart ---------------
-    st.subheader("Activity Over Time")
-    fig_placeholder1 = st.empty()
-    if selected_subsector_raw and not monthly_df.empty:
-        fig_activity = px.line(
-            monthly_df, x='year_month', y='activity', markers=True,
-            title='Activity'
-        )
-        fig_placeholder1.plotly_chart(fig_activity, use_container_width=True)
-    elif not selected_subsector_raw:
-        fig_placeholder1.markdown(
-            """
-            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-                <h4>Select a Subsector to see Activity Over Time</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        fig_placeholder1.markdown(
-            """
-            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-                <h4>No asset-level data for this subsector</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --------------- Emission Factor Chart ---------------
-    st.subheader("Emissions Factor Over Time")
-    fig_placeholder2 = st.empty()
-    if selected_subsector_raw and not monthly_df.empty:
-        fig_ef = px.line(
-            monthly_df, x='year_month', y='mean_emissions_factor', markers=True,
-            title='Emission Factor (tCO2e / unit activity)'
-        )
-        fig_placeholder2.plotly_chart(fig_ef, use_container_width=True)
-    elif not selected_subsector_raw:
-        fig_placeholder2.markdown(
-            """
-            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-                <h4>Select a Subsector to see Emission Factor Over Time</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        fig_placeholder2.markdown(
-            """
-            <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
-                <h4>No asset-level data for this subsector</h4>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    # else:
+    #     st.markdown(
+    #         """
+    #         <div style='border: 1px solid #ccc; height: 400px; opacity: 0.5; display: flex; align-items: center; justify-content: center;'>
+    #             <h4>No asset-level or country-level data for this subsector</h4>
+    #         </div>
+    #         """,
+    #         unsafe_allow_html=True
+    #     )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
