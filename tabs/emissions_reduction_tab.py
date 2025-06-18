@@ -234,6 +234,8 @@ def show_emissions_reduction_plan():
     where_clauses = []
     if selected_region == "Global":
         table = country_subsector_totals_path
+        where_clauses.append("gas = 'co2e_100yr'")
+        where_clauses.append("country_name is not null")
     elif selected_city and not selected_city.startswith("--"):
         table = city_path
         where_clauses.append(f"city_name = '{selected_city}'")
@@ -248,16 +250,17 @@ def show_emissions_reduction_plan():
     else:
         table = country_subsector_totals_path
         where_clauses.append("gas = 'co2e_100yr'")
+        where_clauses.append("country_name is not null")
 
         if region_condition:
             col = region_condition['column_name']
             val = region_condition['column_value']
             if isinstance(val, list):
                 val_str = "(" + ", ".join(f"'{v}'" for v in val) + ")"
-                where_clauses.append(f"{col} IN {val_str}")
+                where_clauses.append(f" {col} IN {val_str}")
             else:
                 val_str = f"'{val}'"
-                where_clauses.append(f"{col} = {val_str}")
+                where_clauses.append(f" {col} = {val_str}")
 
 
     where_sql = ""
@@ -277,10 +280,15 @@ def show_emissions_reduction_plan():
             sector,
             SUM(emissions_quantity) AS country_emissions_quantity
         FROM '{table}'
+        
         {where_sql}
+        
         GROUP BY year, sector
+        
         ORDER BY sector
     """
+
+    # print(query_country)
 
     # --------------------------- Visualize Sector Pie ---------------------------
     df_pie = con.execute(query_country).df()
@@ -365,32 +373,45 @@ def show_emissions_reduction_plan():
             val_str = f"'{val}'"
             reduction_where_clause.append(f"ae.{col} = {val_str}")   
     
-    where_clause_sql = f"WHERE {' AND '.join(reduction_where_clause)}" if reduction_where_clause else ""
+    reduction_where_sql = f"WHERE {' AND '.join(reduction_where_clause)}" if reduction_where_clause else ""
 
     sql_join = ""
     if selected_city and not selected_city.startswith("--") and country_selected_bool:
-        # sql_join = f""" 
-        #     INNER JOIN (
-        #         select distinct city_id
-        #             , city_name 
-        #         from '{city_path}'
-        #         where city_name = '{selected_city}'
-        #     ) c
-        #         on cast(c.city_id as varchar) = cast(ae.city_id as varchar)
-        # """
-        pass
+        sql_join = f""" 
+            INNER JOIN (
+                select distinct city_id
+                    , city_name 
+                from '{city_path}'
+                where city_name = '{selected_city}'
+            ) c
+                on c.city_id = regexp_replace(ae.ghs_fua[1], '[{{}}]', '', 'g')
+        """
     elif selected_county_district and not selected_county_district.startswith("--") and country_selected_bool:
         sql_join = f"""
+            inner join (
+                select distinct gadm_2_id
 
+                from '{gadm_2_path}'
+
+                where gadm_2_name = '{selected_county_district}'
+            ) g2
+                on g2.gadm_2_id = ae.gadm_2
         """
     elif selected_state_province and not selected_state_province.startswith("--") and country_selected_bool:
         sql_join = f"""
+            inner join (
+                select distinct gadm_id
 
+                from '{gadm_1_path}'
+
+                where gadm_1_name = '{selected_state_province}'
+            ) g1
+                on g1.gadm_id = ae.gadm_1
         """
 
     query_sector_reductions = f'''
         SELECT 
-            sector,
+            sector sector,
             SUM(emissions_quantity) AS emissions_quantity,
             SUM(emissions_reduction_potential) AS emissions_reduction_potential
         
@@ -408,7 +429,7 @@ def show_emissions_reduction_plan():
                     WHEN AVG(ae.ef_12_moer) IS NULL 
                         THEN SUM(ae.emissions_quantity)
                     ELSE SUM(ae.activity) * AVG(ae.ef_12_moer)
-                END AS asset_emissions_quantity,
+                END AS emissions_quantity,
                 
                 GREATEST(
                     0,
@@ -425,7 +446,7 @@ def show_emissions_reduction_plan():
                 AND ae.subsector = pct.original_inventory_sector
             {sql_join}
 
-            {where_clause_sql}
+            {reduction_where_sql}
             
             GROUP BY 
                 ae.asset_id,
@@ -434,15 +455,25 @@ def show_emissions_reduction_plan():
                 ae.iso3_country,
                 ae.country_name
         ) asset_level
-        
+                
         GROUP BY sector
     '''
 
-    print(query_sector_reductions)
+    # print(query_sector_reductions)
 
     df_stacked_bar = con.execute(query_sector_reductions).df()
 
-    df_stacked_bar['static_emissions_q'] = df_stacked_bar["emissions_quantity"] - df_stacked_bar["emissions_reduction_potential"]
+    # print(df_pie)
+    # print(df_stacked_bar)
+
+    df_stacked_bar = pd.merge(
+        df_pie[["sector","country_emissions_quantity"]],
+        df_stacked_bar[["sector","emissions_reduction_potential"]],
+        on="sector",
+        how="outer"
+    )
+
+    df_stacked_bar['static_emissions_q'] = df_stacked_bar["country_emissions_quantity"] - df_stacked_bar["emissions_reduction_potential"]
 
     df_stacked_bar["total"] = (
         df_stacked_bar["static_emissions_q"] + df_stacked_bar["emissions_reduction_potential"]
