@@ -38,7 +38,7 @@ def show_emissions_reduction_plan():
     )
 
     # --------- DROPDOWN ROW 1 ----------
-    country_dropdown, state_province_dropdown, county_district_drodpdown, city_dropdown = st.columns(4)
+    country_dropdown, state_province_dropdown, county_district_dropdown, city_dropdown = st.columns(4)
     with country_dropdown:
         
         selected_region = st.selectbox(
@@ -63,43 +63,34 @@ def show_emissions_reduction_plan():
 
     country_selected_bool = selected_region != "Global"
 
-    if not country_selected_bool:
-        state_province_options = ['Select a Region/Country to Enable']
-        county_district_options = ['Select a Region/Country to Enable']
-        city_options = ['Select a Region/Country to Enable']
-        disable_subregion_dropdowns = True
-    else:
-        state_province_options = ['-- Select State / Province --'] + sorted(
-            row[0] for row in con.execute(
-                f"SELECT DISTINCT gadm_1_name FROM '{gadm_1_path}' WHERE {col} in {val_str}"
-            ).fetchall()
-        )
-        
-        county_district_options = ['-- Select County / District --'] + sorted(
-            row[0] for row in con.execute(
-                f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE {col} in {val_str}"
-            ).fetchall()
-        )
-        
-        city_options = ['-- Select City --'] + sorted(
-            row[0] for row in con.execute(
-                f"SELECT DISTINCT city_name FROM '{city_path}' WHERE {col} in {val_str} and city_name is not null"
-            ).fetchall()
-        )
-        disable_subregion_dropdowns = False
-
     with state_province_dropdown:
-        selected_state_province = st.selectbox(
-            "State / Province", 
-            state_province_options, 
-            disabled=not country_selected_bool, 
-            key="state_province_selector",
-            index=0 if disable_subregion_dropdowns else None
-        )
+        if not country_selected_bool:
+            state_province_options = ['Select a Region/Country to Enable']
+            selected_state_province = st.selectbox(
+                "State / Province",
+                state_province_options,
+                disabled=True,
+                key="state_province_selector",
+                index=0
+            )
+        else:
+            state_province_options = ['-- Select State / Province --'] + sorted(
+                row[0] for row in con.execute(
+                    f"SELECT DISTINCT gadm_1_name FROM '{gadm_1_path}' WHERE {col} IN {val_str}"
+                ).fetchall()
+            )
+            selected_state_province = st.selectbox(
+                "State / Province",
+                state_province_options,
+                disabled=False,
+                key="state_province_selector",
+                index=0
+            )
 
-    with county_district_drodpdown:
-        if disable_subregion_dropdowns:
-            county_district_options = ["Select a Region/Country to Enable"]
+    # --- COUNTY / DISTRICT ---
+    with county_district_dropdown:
+        if not country_selected_bool:
+            county_district_options = ['Select a Region/Country to Enable']
             selected_county_district = st.selectbox(
                 "County / District",
                 county_district_options,
@@ -114,22 +105,40 @@ def show_emissions_reduction_plan():
                         f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE gadm_1_name = '{selected_state_province}'"
                     ).fetchall()
                 )
-
+            else:
+                county_district_options = ['-- Select County / District --']
             selected_county_district = st.selectbox(
                 "County / District",
                 county_district_options,
                 disabled=False,
-                key="county_district_selector"
+                key="county_district_selector",
+                index=0
             )
 
+    # --- CITY ---
     with city_dropdown:
-        selected_city = st.selectbox(
-            "City", 
-            city_options, 
-            disabled=not country_selected_bool, 
-            key="city_selector",
-            index=0 if disable_subregion_dropdowns else None
-        )
+        if not country_selected_bool:
+            city_options = ['Select a Region/Country to Enable']
+            selected_city = st.selectbox(
+                "City",
+                city_options,
+                disabled=True,
+                key="city_selector",
+                index=0
+            )
+        else:
+            city_options = ['-- Select City --'] + sorted(
+                row[0] for row in con.execute(
+                    f"SELECT DISTINCT city_name FROM '{city_path}' WHERE {col} IN {val_str} AND city_name IS NOT NULL"
+                ).fetchall()
+            )
+            selected_city = st.selectbox(
+                "City",
+                city_options,
+                disabled=False,
+                key="city_selector",
+                index=0
+            )
 
     # ---------- DROPDOWN ROW 2 ---------
     percentile_dropdown, year_dropdown, proportion_scale_bar = st.columns(3)
@@ -273,53 +282,6 @@ def show_emissions_reduction_plan():
         ORDER BY sector
     """
 
-    query_sector_reductions = f'''
-        SELECT 
-            sector,
-            SUM(emissions_quantity) AS emissions_quantity,
-            SUM(emissions_reduction_potential) AS emissions_reduction_potential
-        
-        FROM (
-            SELECT 
-                ae.asset_id,
-                ae.sector,
-                ae.subsector,
-                ae.iso3_country,
-                ae.country_name,
-                SUM(ae.activity) AS activity,
-                AVG(ae.ef_12_moer) AS ef_12_moer,
-                
-                CASE 
-                    WHEN AVG(ae.ef_12_moer) IS NULL 
-                        THEN SUM(ae.emissions_quantity)
-                    ELSE SUM(ae.activity) * AVG(ae.ef_12_moer)
-                END AS emissions_quantity,
-                
-                GREATEST(
-                    0,
-                    CASE 
-                        WHEN AVG(ae.ef_12_moer) IS NULL 
-                            THEN SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})
-                        ELSE (SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})
-                    END
-                ) AS emissions_reduction_potential
-            
-            FROM '{annual_asset_path}' ae
-            LEFT JOIN '{percentile_path}' pct
-                ON ae.iso3_country = pct.iso3_country
-                AND ae.subsector = pct.original_inventory_sector
-            
-            GROUP BY 
-                ae.asset_id,
-                ae.sector,
-                ae.subsector,
-                ae.iso3_country,
-                ae.country_name
-        ) asset_level
-        
-        GROUP BY sector
-    '''
-
     # --------------------------- Visualize Sector Pie ---------------------------
     df_pie = con.execute(query_country).df()
 
@@ -394,6 +356,90 @@ def show_emissions_reduction_plan():
     )
 
     # ---------------------------Visualize Stacked Bar ---------------------------
+    reduction_where_clause = []
+    if col and val:
+        if isinstance(val, list):
+            val_str = "(" + ", ".join(f"'{v}'" for v in val) + ")"
+            reduction_where_clause.append(f"ae.{col} IN {val_str}")
+        else:
+            val_str = f"'{val}'"
+            reduction_where_clause.append(f"ae.{col} = {val_str}")   
+    
+    where_clause_sql = f"WHERE {' AND '.join(reduction_where_clause)}" if reduction_where_clause else ""
+
+    sql_join = ""
+    if selected_city and not selected_city.startswith("--") and country_selected_bool:
+        # sql_join = f""" 
+        #     INNER JOIN (
+        #         select distinct city_id
+        #             , city_name 
+        #         from '{city_path}'
+        #         where city_name = '{selected_city}'
+        #     ) c
+        #         on cast(c.city_id as varchar) = cast(ae.city_id as varchar)
+        # """
+        pass
+    elif selected_county_district and not selected_county_district.startswith("--") and country_selected_bool:
+        sql_join = f"""
+
+        """
+    elif selected_state_province and not selected_state_province.startswith("--") and country_selected_bool:
+        sql_join = f"""
+
+        """
+
+    query_sector_reductions = f'''
+        SELECT 
+            sector,
+            SUM(emissions_quantity) AS emissions_quantity,
+            SUM(emissions_reduction_potential) AS emissions_reduction_potential
+        
+        FROM (
+            SELECT 
+                ae.asset_id,
+                ae.sector,
+                ae.subsector,
+                ae.iso3_country,
+                ae.country_name,
+                SUM(ae.activity) AS activity,
+                AVG(ae.ef_12_moer) AS ef_12_moer,
+                
+                CASE 
+                    WHEN AVG(ae.ef_12_moer) IS NULL 
+                        THEN SUM(ae.emissions_quantity)
+                    ELSE SUM(ae.activity) * AVG(ae.ef_12_moer)
+                END AS asset_emissions_quantity,
+                
+                GREATEST(
+                    0,
+                    CASE 
+                        WHEN AVG(ae.ef_12_moer) IS NULL 
+                            THEN (SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                        ELSE ((SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                    END
+                ) AS emissions_reduction_potential
+            
+            FROM '{annual_asset_path}' ae
+            LEFT JOIN '{percentile_path}' pct
+                ON ae.iso3_country = pct.iso3_country
+                AND ae.subsector = pct.original_inventory_sector
+            {sql_join}
+
+            {where_clause_sql}
+            
+            GROUP BY 
+                ae.asset_id,
+                ae.sector,
+                ae.subsector,
+                ae.iso3_country,
+                ae.country_name
+        ) asset_level
+        
+        GROUP BY sector
+    '''
+
+    print(query_sector_reductions)
+
     df_stacked_bar = con.execute(query_sector_reductions).df()
 
     df_stacked_bar['static_emissions_q'] = df_stacked_bar["emissions_quantity"] - df_stacked_bar["emissions_reduction_potential"]
@@ -403,7 +449,6 @@ def show_emissions_reduction_plan():
     )
     
     df_stacked_bar = df_stacked_bar.sort_values("total", ascending=False)
-    #ordered_sectors = df_stacked_bar["sector"].to_list()
 
     df_stacked_bar["sector"] = pd.Categorical(
         df_stacked_bar["sector"],
@@ -411,7 +456,8 @@ def show_emissions_reduction_plan():
         ordered=True
     )
 
-    # print(df_stacked_bar)
+    df_stacked_bar["formatted_static"] = df_stacked_bar["static_emissions_q"].apply(format_number_short)
+    df_stacked_bar["formatted_avoided"] = df_stacked_bar["emissions_reduction_potential"].apply(format_number_short)
 
     fig = go.Figure()
 
@@ -419,14 +465,18 @@ def show_emissions_reduction_plan():
         name='Post-Reduction Emissions',
         x=df_stacked_bar["sector"],
         y=df_stacked_bar["static_emissions_q"],
-        marker_color="#606060"
+        marker_color="#606060",
+        customdata=df_stacked_bar["formatted_static"],
+        hovertemplate='<b>%{x}</b><br>Post-Reduction Emissions: %{customdata} tCO₂e<extra></extra>'
     )
 
     fig.add_bar(
         name='Avoided Emissions',
         x=df_stacked_bar["sector"],
         y=df_stacked_bar["emissions_reduction_potential"],
-        marker_color="#C0C0C0"
+        marker_color="#C0C0C0",
+        customdata=df_stacked_bar["formatted_avoided"],
+        hovertemplate='<b>%{x}</b><br>Avoided Emissions: %{customdata} tCO₂e<extra></extra>'
     )
 
     fig.update_layout(
@@ -442,8 +492,21 @@ def show_emissions_reduction_plan():
         height=600
     )
 
+    fig.add_trace(
+        go.Bar(
+            x=df_stacked_bar["sector"],
+            y=[0] * len(df_stacked_bar),  # invisible base
+            text=[format_number_short(v) for v in df_stacked_bar["total"]],
+            textposition="outside",
+            marker=dict(color="rgba(0,0,0,0)"),  # transparent bar
+            showlegend=False,
+            hoverinfo="skip",
+            cliponaxis=False,
+            name="Total"
+        )
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
     con.close()
     
-    # sup
