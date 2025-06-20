@@ -713,10 +713,12 @@ def show_emissions_reduction_plan():
 
     # ------------------ Building Sentence 3 ------------------
     hr_le_sectors = list(high_reduction_low_emitter_df["sector"])
-    if len(hr_le_sectors) > 1:
-        s3_sector_text = ", ".join(hr_le_sectors[:-1]) + " and " + hr_le_sectors[-1]
-    else:
+    if not hr_le_sectors:
+        s3_sector_text = ""
+    elif len(hr_le_sectors) == 1:
         s3_sector_text = hr_le_sectors[0]
+    else:
+        s3_sector_text = ", ".join(hr_le_sectors[:-1]) + " and " + hr_le_sectors[-1]
 
     # Format reduction values as green-highlighted numbers (no decimals, commas OK)
     sentence_3_formatted_reductions = [
@@ -725,15 +727,25 @@ def show_emissions_reduction_plan():
     ]
 
     # Join reductions with proper punctuation
-    if len(sentence_3_formatted_reductions) > 1:
-        sentence_3_text = ", ".join(sentence_3_formatted_reductions[:-1]) + " and " + sentence_3_formatted_reductions[-1]
-    else:
+    sentence_3_formatted_reductions = [
+    f"<span style='color: green;'><strong>{format_number_short(val)}</strong></span>"
+    for val in high_reduction_low_emitter_df["emissions_reduction_potential"]
+]
+
+    if not sentence_3_formatted_reductions:
+        sentence_3_text = ""
+    elif len(sentence_3_formatted_reductions) == 1:
         sentence_3_text = sentence_3_formatted_reductions[0]
+    else:
+        sentence_3_text = ", ".join(sentence_3_formatted_reductions[:-1]) + " and " + sentence_3_formatted_reductions[-1]
 
-    sentence_3 = f"While the {s3_sector_text} sector{'s' if len(hr_le_sectors) > 1 else ''} {'are' if len(hr_le_sectors) > 1 else 'is'} not among the top emitting sectors, {'they' if len(hr_le_sectors) > 1 else 'it'} rank{'s' if len(hr_le_sectors) == 1 else ''} top 5 for emissions reduction opportunities with {sentence_3_text}  metric tons."
+    if not sentence_3_formatted_reductions:
+        sentence_3 = ""
+    else:
+        sentence_3 = f"While the {s3_sector_text} sector{'s' if len(hr_le_sectors) > 1 else ''} {'are' if len(hr_le_sectors) > 1 else 'is'} not among the top emitting sectors, {'they' if len(hr_le_sectors) > 1 else 'it'} rank{'s' if len(hr_le_sectors) == 1 else ''} top 5 for emissions reduction opportunities with {sentence_3_text}  metric tons."
 
 
-    # ----- Build Sentence 4 -------
+    # ----- Building Sentence 4 -------
     include_sectors = ", ".join(f"'{s.lower()}'" for s in top_emitting_sectors_list)
 
     sentence_4_query = con.execute(f"""
@@ -812,14 +824,19 @@ def show_emissions_reduction_plan():
     # quick formatting for the first sentence
     highlight_green_1 = f"<span style='color: green;'><strong>{format_number_short(total_reduction_potential)} (-{reduction_pct:.0f}%)</strong></span>"
     
+    if sentence_3:
+        sentence_3_and_4 = f"""{sentence_3} 
+
+                               {sentence_4}"""
+    else:
+        sentence_3_and_4 = sentence_4
+
     reduction_text = f"""
         Using Climate TRACE emissions data, CO2e emissions in {selected_region if selected_region != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
 
         {sentence_2}
 
-        {sentence_3}
-
-        {sentence_4}
+        {sentence_3_and_4}
     """
 
     st.markdown(f"""
