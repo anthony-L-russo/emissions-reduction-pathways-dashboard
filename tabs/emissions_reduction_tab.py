@@ -7,13 +7,15 @@ from plotly.subplots import make_subplots
 import base64
 from calendar import month_name
 import calendar
+from collections import defaultdict
 from config import CONFIG
 from utils.utils import (format_dropdown_options, 
                          map_region_condition, 
                          format_number_short, 
                          create_excel_file, 
                          bordered_metric, 
-                         map_percentile_col)
+                         map_percentile_col,
+                         is_country)
 
 
 def show_emissions_reduction_plan():
@@ -102,11 +104,27 @@ def show_emissions_reduction_plan():
             if selected_state_province and not selected_state_province.startswith("--"):
                 county_district_options = ['-- Select County / District --'] + sorted(
                     row[0] for row in con.execute(
-                        f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE gadm_1_name = '{selected_state_province}'"
+                        f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE gadm_1_name = '{selected_state_province.replace("'", "''")}'"
+                    ).fetchall()
+                )
+            elif col and val is not None:
+                # Convert val to string and escape any single quotes
+                if isinstance(val, list):
+                    sanitized_vals = [str(v).replace("'", "''") for v in val]
+                    val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_vals) + ")"
+                    filter_clause = f"{col} IN {val_str}"
+                else:
+                    val_str = str(val).replace("'", "''")
+                    filter_clause = f"{col} = '{val_str}'"
+
+                county_district_options = ['-- Select County / District --'] + sorted(
+                    row[0] for row in con.execute(
+                        f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE {filter_clause}"
                     ).fetchall()
                 )
             else:
                 county_district_options = ['-- Select County / District --']
+
             selected_county_district = st.selectbox(
                 "County / District",
                 county_district_options,
@@ -127,11 +145,29 @@ def show_emissions_reduction_plan():
                 index=0
             )
         else:
+            def duckdb_safe_val(v):
+                if isinstance(v, bool):
+                    return "TRUE" if v else "FALSE"
+                return f"'{str(v).replace("'", "''")}'"
+
+            if isinstance(val, list):
+                val_str = "(" + ", ".join([duckdb_safe_val(v) for v in val]) + ")"
+            else:
+                # Treat single value as a list of one
+                val_str = f"({duckdb_safe_val(val)})"
+
+            query = f"""
+                SELECT DISTINCT city_name 
+                FROM '{city_path}' 
+                WHERE {col} IN {val_str} AND city_name IS NOT NULL
+            """
+
+            print("DEBUG QUERY:\n", query)
+
             city_options = ['-- Select City --'] + sorted(
-                row[0] for row in con.execute(
-                    f"SELECT DISTINCT city_name FROM '{city_path}' WHERE {col} IN {val_str} AND city_name IS NOT NULL"
-                ).fetchall()
+                row[0] for row in con.execute(query).fetchall()
             )
+
             selected_city = st.selectbox(
                 "City",
                 city_options,
@@ -141,11 +177,45 @@ def show_emissions_reduction_plan():
             )
 
     # ---------- DROPDOWN ROW 2 ---------
-    percentile_dropdown, year_dropdown, proportion_scale_bar = st.columns(3)
+    benchmarking_group_dropdown, percentile_dropdown, year_dropdown, proportion_scale_bar = st.columns(4)
+
+    with benchmarking_group_dropdown:    
+        benchmarking_options = [
+            'Country',
+            'Global'
+        ]
+
+        benchmarking_help = (
+            "This selection enables users to establish baseline emissions benchmarks by selecting either all assets "
+            "within a sector globally or only those within a specific country. By comparing assets to these benchmarks, "
+            "users can identify emissions reduction opportunities at both the national and global levels."
+        )
+
+        if is_country(selected_region):
+            selected_benchmark = st.selectbox(
+                "Benchmarking Group",
+                benchmarking_options,
+                help=benchmarking_help,
+                key="benchmarking_selector"
+            )
+
+        else:
+            selected_benchmark = st.selectbox(
+                "Benchmarking Group",
+                "Global",
+                disabled=True,
+                help=benchmarking_help,
+                key="benchmarking_selector"
+            )
+
+        if selected_benchmark == "Global":
+            benchmark_join = "AND pct.iso3_country = 'all' "
+        else:
+            benchmark_join = "AND ae.iso3_country = pct.iso3_country "
 
     with percentile_dropdown:
         percentile_options = [
-            '0th',
+            # '0th',
             '10th',
             '20th',
             '30th',
@@ -158,9 +228,16 @@ def show_emissions_reduction_plan():
             '100th'
         ]
 
+        percentile_help = (
+            "Benchmarks are set using emissions factor percentiles within the selected Benchmarking Group. For example, "
+            "the 10th percentile reflects the average emissions factor of the top-performing 10% of assets, while the "
+            "50th percentile represents the midpoint range (40–50% asset bucket)."
+        )
+
         selected_percentile = st.selectbox(
-            "Percentile",
+            "Emission Reduction Target (Percentile)",
             percentile_options,
+            help=percentile_help,
             key="percentile_selector"
         )
 
@@ -178,15 +255,22 @@ def show_emissions_reduction_plan():
         )
 
     with proportion_scale_bar:
+        proportion_help = (
+            "This input defines the fraction of each asset’s emissions reduction potential to include in the plan. "
+            "Assets across all sectors are ranked by reduction potential, and the specified proportion is applied to "
+            "each asset’s opportunity. For example, if an asset has a reduction potential of 100 tCO₂e and the proportion "
+            "is set to 80%, only 80 tCO₂e is counted toward the plan."
+        )
+
         selected_proportion = st.slider(
             label="Proportion",
             min_value=0,
             max_value=100,
             value=100,
+            help=proportion_help,
             step=1,
             format="%d%%"
         )
-
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -210,7 +294,6 @@ def show_emissions_reduction_plan():
         country_prefix = "the " if selected_region in use_the_countries else ""
         subject_phrase = f"{country_prefix}{selected_region}'s facilities"
 
-    # Format the message
     summary_text = (
         f"Climate TRACE, a coalition of universities, NGOs, and tech companies founded by former "
         f"U.S. Vice President Al Gore, uses AI, satellites, and big data to estimate the emissions of "
@@ -219,7 +302,7 @@ def show_emissions_reduction_plan():
         f"emissions estimates for {selected_year}:"
     )
 
-    # Display in Streamlit
+    # display text
     st.markdown(
         f"""
         <div style="margin-top: 8px; font-size: 17px; line-height: 1.5;">
@@ -238,11 +321,15 @@ def show_emissions_reduction_plan():
         where_clauses.append("country_name is not null")
     elif selected_city and not selected_city.startswith("--"):
         table = city_path
-        where_clauses.append(f"city_name = '{selected_city}'")
+        selected_city_cleaned = selected_city.replace("'","''")
+        where_clauses.append(f"city_name = '{selected_city_cleaned}'")
+
 
     elif selected_county_district and not selected_county_district.startswith("--"):
         table = gadm_2_path
-        where_clauses.append(f"gadm_2_name = '{selected_county_district}'")
+        selected_county_district_cleaned = selected_county_district.replace("'","''")
+        where_clauses.append(f"gadm_2_name = '{selected_county_district_cleaned}'")
+
 
     elif selected_state_province and not selected_state_province.startswith("--"):
         table = gadm_1_path
@@ -266,13 +353,10 @@ def show_emissions_reduction_plan():
     where_sql = ""
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
-    else:
-        where_sql = f"WHERE year = {selected_year}"  # If you always want to filter by year
-
-    # If year filter is always needed:
-    if where_clauses:
         where_sql += f" AND year = {selected_year}"
-    # Otherwise, you could also include it in the GROUP BY only
+    else:
+        where_sql = f"WHERE year = {selected_year}"
+    
 
     query_country = f"""
         SELECT 
@@ -288,11 +372,24 @@ def show_emissions_reduction_plan():
         ORDER BY sector
     """
 
-    # print(query_country)
-
-    # --------------------------- Visualize Sector Pie ---------------------------
     df_pie = con.execute(query_country).df()
 
+    total_emissions = format_number_short(df_pie["country_emissions_quantity"].sum())
+    total_emissions_text = (
+        f"1) &nbsp; <span style='color:red;'> {total_emissions}</span> tons of CO2 equivalent emissions, "
+        f"broken down into the following sectors:"
+    )
+
+    st.markdown(
+        f"""
+        <div style="margin-top: 8px; font-size: 17px; line-height: 1.5;">
+            {total_emissions_text}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # --------------------------- Visualize Sector Pie ---------------------------
     sector_color_map = {
         "agriculture": "#0BCF42",
         "buildings": "#03A0E3",
@@ -302,7 +399,7 @@ def show_emissions_reduction_plan():
         "manufacturing": "#9554FF",
         "mineral-extraction": "#4380F5",
         "power": "#407076",
-        "transportation": "#FFBBA1",
+        "transportation": "#FBBA1A",
         "waste": "#BBD421"
     }
 
@@ -346,7 +443,7 @@ def show_emissions_reduction_plan():
 
     
     
-    sector_reduction_text = (f"By comparing specific {selected_region if selected_region != 'Global' else 'global'} "
+    sector_reduction_text = (f"2) &nbsp; By comparing specific {selected_region if selected_region != 'Global' else 'global'} "
                              f"facilities to best widely available technology facilities elsewhere, the coalition " 
                              f"has also identified specific emissions reduction opportunities in every sector:"
                             )
@@ -375,30 +472,30 @@ def show_emissions_reduction_plan():
     
     reduction_where_sql = f"WHERE {' AND '.join(reduction_where_clause)}" if reduction_where_clause else ""
 
-    sql_join = ""
+    dropdown_join = ""
     if selected_city and not selected_city.startswith("--") and country_selected_bool:
-        sql_join = f""" 
+        dropdown_join = f""" 
             INNER JOIN (
                 select distinct city_id
                     , city_name 
                 from '{city_path}'
-                where city_name = '{selected_city}'
+                where city_name = '{selected_city_cleaned}'
             ) c
                 on c.city_id = regexp_replace(ae.ghs_fua[1], '[{{}}]', '', 'g')
         """
     elif selected_county_district and not selected_county_district.startswith("--") and country_selected_bool:
-        sql_join = f"""
+        dropdown_join = f"""
             inner join (
                 select distinct gadm_2_id
 
                 from '{gadm_2_path}'
 
-                where gadm_2_name = '{selected_county_district}'
+                where gadm_2_name = '{selected_county_district_cleaned}'
             ) g2
                 on g2.gadm_2_id = ae.gadm_2
         """
     elif selected_state_province and not selected_state_province.startswith("--") and country_selected_bool:
-        sql_join = f"""
+        dropdown_join = f"""
             inner join (
                 select distinct gadm_id
 
@@ -442,9 +539,10 @@ def show_emissions_reduction_plan():
             
             FROM '{annual_asset_path}' ae
             LEFT JOIN '{percentile_path}' pct
-                ON ae.iso3_country = pct.iso3_country
-                AND ae.subsector = pct.original_inventory_sector
-            {sql_join}
+                ON ae.subsector = pct.original_inventory_sector
+                AND ae.asset_type_2 = pct.asset_type
+                {benchmark_join}
+            {dropdown_join}
 
             {reduction_where_sql}
             
@@ -538,6 +636,304 @@ def show_emissions_reduction_plan():
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    
+
+
+
+
+
+    generic_text = "Intervention types vary. For example, in road transportation, Climate TRACE " \
+                   "considered the emissions reduction potential from electrifying transport. For " \
+                   "elecricity, Climate TRACE considered the potential to replace fossil fuel power " \
+                   "plants with clean renewable energy. In agriculture, Climate TRACE considered replacing " \
+                   "existing agricultural practices with lower-emitting practices. But in every case, " \
+                   "interventions are based on actual practices widely observed in other facilities, " \
+                   "not speculative new technologies."
+    
+    st.markdown(
+        f"""
+        <div style="margin-top: 8px; font-size: 17px; line-height: 1.5;">
+            {generic_text}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    top_5_reduction_df = df_stacked_bar.sort_values(by="emissions_reduction_potential",ascending=False).head(5)
+    total_reduction_potential = top_5_reduction_df["emissions_reduction_potential"].sum()
+
+    top_emitting_sectors_df = df_stacked_bar.sort_values(by="country_emissions_quantity",ascending=False).head(5)
+    total_emissions_top = top_emitting_sectors_df["country_emissions_quantity"].sum()
+
+    reduction_pct = int((total_reduction_potential / total_emissions_top) * 100)
+
+    sentence_2_data = pd.merge(
+            top_emitting_sectors_df[["sector","country_emissions_quantity"]],
+            top_5_reduction_df[["sector","emissions_reduction_potential"]],
+            on="sector",
+            how="inner"
+        ).sort_values(by="emissions_reduction_potential", ascending=False)
+
+    # Store both raw and formatted values
+    reductions_raw = sentence_2_data["emissions_reduction_potential"].tolist()
+    reductions_formatted = sentence_2_data["emissions_reduction_potential"].apply(format_number_short).tolist()
+
+    # get the sectors to display in the text
+    top_emitting_sectors_list = list(sentence_2_data["sector"])
+
+    # prep for sentence 3
+    high_reduction_potential_low_emitter = []
+    for sector in top_5_reduction_df['sector']:
+        if sector not in top_emitting_sectors_list:
+            high_reduction_potential_low_emitter.append(sector)
+    
+    high_reduction_low_emitter_df = top_5_reduction_df[
+        top_5_reduction_df['sector'].isin(high_reduction_potential_low_emitter)
+    ]
+
+
+    # ------- Sentence 2: format sector list as natural language ------
+    if len(top_emitting_sectors_list) > 1:
+        sectors_text = ", ".join(top_emitting_sectors_list[:-1]) + " and " + top_emitting_sectors_list[-1]
+    else:
+        sectors_text = top_emitting_sectors_list[0]
+
+    # Highlight formatted reductions in green (no commas highlighted)
+    formatted_reductions = [
+        f"<span style='color: green;'><strong>{r}</strong></span>" for r in reductions_formatted
+    ]
+    reductions_text = " , ".join(formatted_reductions)
+
+    # Final sentence
+    sentence_2 = f"The top emitting sectors, including {sectors_text}, have opportunities to reduce CO2e emissions by {reductions_text} metric tons, respectively."
+
+    # ------------------ Building Sentence 3 ------------------
+    hr_le_sectors = list(high_reduction_low_emitter_df["sector"])
+    if len(hr_le_sectors) > 1:
+        s3_sector_text = ", ".join(hr_le_sectors[:-1]) + " and " + hr_le_sectors[-1]
+    else:
+        s3_sector_text = hr_le_sectors[0]
+
+    # Format reduction values as green-highlighted numbers (no decimals, commas OK)
+    sentence_3_formatted_reductions = [
+        f"<span style='color: green;'><strong>{format_number_short(val)}</strong></span>"
+        for val in high_reduction_low_emitter_df["emissions_reduction_potential"]
+    ]
+
+    # Join reductions with proper punctuation
+    if len(sentence_3_formatted_reductions) > 1:
+        sentence_3_text = ", ".join(sentence_3_formatted_reductions[:-1]) + " and " + sentence_3_formatted_reductions[-1]
+    else:
+        sentence_3_text = sentence_3_formatted_reductions[0]
+
+    sentence_3 = f"While the {s3_sector_text} sector{'s' if len(hr_le_sectors) > 1 else ''} {'are' if len(hr_le_sectors) > 1 else 'is'} not among the top emitting sectors, {'they' if len(hr_le_sectors) > 1 else 'it'} rank{'s' if len(hr_le_sectors) == 1 else ''} top 5 for emissions reduction opportunities with {sentence_3_text}  metric tons."
+
+
+    # ----- Build Sentence 4 -------
+    include_sectors = ", ".join(f"'{s.lower()}'" for s in top_emitting_sectors_list)
+
+    sentence_4_query = con.execute(f"""
+        with sector as (
+            select sector
+                , sum(emissions_quantity) sector_emissions_quantity
+
+            from '{table}'
+
+            {where_sql}
+                and lower(sector) <> 'power'
+                and sector in ({include_sectors})
+
+            group by sector
+        ),
+
+        subsector as (
+            select sector
+                , subsector
+                , sum(emissions_quantity) subsector_emissions_quantity
+
+            from '{country_subsector_totals_path}'
+
+            {where_sql}
+                and lower(sector) <> 'power'
+                and sector in ({include_sectors})
+
+            group by sector
+                , subsector
+        ),
+
+        agg as (
+            select subsector.sector
+                , subsector.subsector
+                , sum(subsector.subsector_emissions_quantity) subsector_emissions_quantity
+
+            from subsector
+            inner join sector
+                on sector.sector = subsector.sector
+
+            group by subsector.sector
+                , subsector.subsector
+
+            having (sum(subsector.subsector_emissions_quantity) / sum(sector.sector_emissions_quantity)) >= 0.05
+        ),
+        
+        subsector_rank as (
+            select *
+                , row_number() over (partition by sector order by subsector_emissions_quantity desc) as subsector_rank
+            from agg
+        )
+
+        select *
+        from subsector_rank
+        where subsector_rank.subsector_rank <= 2
+
+    """).df()
+
+    # print(sentence_4_query)
+    sector_to_subsectors = defaultdict(list)
+    for _, row in sentence_4_query.iterrows():
+        sector_to_subsectors[row['sector']].append(row['subsector'])
+
+    # Construct sentence segments
+    segments = []
+    for sector, subsectors in sector_to_subsectors.items():
+        if len(subsectors) > 1:
+            subsector_text = ", ".join(subsectors[:-1]) + " and " + subsectors[-1]
+        else:
+            subsector_text = subsectors[0]
+        segments.append(f"in the {sector} sector, high-emitting subsectors include {subsector_text}")
+
+    # Final sentence
+    sentence_4 = "Additionally, " + "; ".join(segments) + "."
+
+    # quick formatting for the first sentence
+    highlight_green_1 = f"<span style='color: green;'><strong>{format_number_short(total_reduction_potential)} (-{reduction_pct:.0f}%)</strong></span>"
+    
+    reduction_text = f"""
+        Using Climate TRACE emissions data, CO2e emissions in {selected_region if selected_region != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
+
+        {sentence_2}
+
+        {sentence_3}
+
+        {sentence_4}
+    """
+
+    st.markdown(f"""
+        ### A possible {selected_region if selected_region != 'Global' else 'Global'} Emissions Reduction Plan
+
+        <div style="border: 1px solid rgba(100,100,100,0.3); padding: 0px 18px 10px 18px; border-radius: 6px; font-size: 16px; line-height: 1.4;">
+            <p style="margin-top: 0px;">{reduction_text.replace('\n', '<br>')}</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div style="margin-top: 8px; font-size: 17px; line-height: 1.5;">
+            <em><strong>This analysis was based on estimated emissions and technology type of the most emitting facilities in {selected_region if selected_region != 'Global' else 'the world'}, including the following estimates:</strong></em>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ------------------------------- Asset Table ---------------------------------
+    asset_table_query = f"""
+        SELECT asset_name
+            , country_name
+            , sector
+            , subsector
+            , emissions_quantity
+            , emissions_reduction_potential
+        
+        FROM (
+            SELECT 
+                ae.asset_name,
+                ae.country_name,
+                ae.sector,
+                ae.subsector,
+                ae.asset_type,
+                
+                SUM(ae.emissions_quantity) AS emissions_quantity,
+                
+                --CASE 
+                    --WHEN AVG(ae.ef_12_moer) IS NULL 
+                       -- THEN SUM(ae.emissions_quantity)
+                   -- ELSE SUM(ae.activity) * AVG(ae.ef_12_moer)
+               -- END AS emissions_quantity,
+
+                GREATEST(
+                    0,
+                    CASE 
+                        WHEN AVG(ae.ef_12_moer) IS NULL 
+                            THEN (SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                        ELSE ((SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                    END
+                ) AS emissions_reduction_potential,
+
+                ROW_NUMBER() OVER (
+                    ORDER BY 
+                        GREATEST(
+                            0,
+                            CASE 
+                                WHEN AVG(ae.ef_12_moer) IS NULL 
+                                    THEN (SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                                ELSE ((SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
+                            END
+                        ) DESC
+                ) AS rank
+            
+            FROM '{annual_asset_path}' ae
+            LEFT JOIN '{percentile_path}' pct
+                ON ae.subsector = pct.original_inventory_sector
+                AND ae.asset_type_2 = pct.asset_type
+                {benchmark_join}
+            {dropdown_join}
+
+            {reduction_where_sql}
+            
+            GROUP BY 
+                ae.asset_name,
+                ae.country_name,
+                ae.sector,
+                ae.subsector,
+                ae.asset_type
+        ) assets
+
+        where rank <= 20
+
+        order by rank asc
+    """
+
+    asset_table_df = con.execute(asset_table_query).df()
+
+    asset_table_df["emissions_quantity"] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
+    asset_table_df["emissions_reduction_potential"] = asset_table_df["emissions_reduction_potential"].apply(lambda x: f"{round(x):,}")  
+
+    styled_df = asset_table_df.style.applymap(
+        lambda val: "color: red", subset=["emissions_quantity"]
+            ).applymap(
+                lambda val: "color: green", subset=["emissions_reduction_potential"]
+            )
+
+    st.markdown("### Top 20 Assets by Emissions Reduction Potential")
+
+    row_height = 35  # pixels per row (adjust as needed)
+    num_rows = 20
+    table_height = row_height * num_rows + 35  # extra for header
+
+    st.dataframe(
+        styled_df,
+        use_container_width=True,
+        height=table_height
+    )
 
     con.close()
     

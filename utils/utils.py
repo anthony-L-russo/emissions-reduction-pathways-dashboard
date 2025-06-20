@@ -299,3 +299,28 @@ def data_add_moer(df, cond={}):
 
             df.loc[mask_sec, ['eq_12','ef_12','eq_12_moer','ef_12_moer']] = df_sec[['eq_12','ef_12','eq_12_moer','ef_12_moer']]
     return df
+
+def is_country(region_selection):
+    if region_selection in [
+        'Global',
+        'Africa',
+        'Antarctica',
+        'Asia',
+        'Europe',
+        'North America',
+        'Oceania',
+        'South America',
+        'EU',
+        'OECD',
+        'Non-OECD',
+        'UNFCCC Annex',
+        'UNFCCC Non-Annex',
+        'Global North',
+        'Global South',
+        'Developed Markets',
+        'Emerging Markets'
+    ]:
+        return False
+    
+    else:
+        return True
