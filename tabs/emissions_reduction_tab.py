@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import duckdb
 import pandas as pd
 import plotly.express as px
@@ -15,7 +16,9 @@ from utils.utils import (format_dropdown_options,
                          create_excel_file, 
                          bordered_metric, 
                          map_percentile_col,
-                         is_country)
+                         is_country,
+                         reset_city,
+                         reset_state_and_county)
 
 
 def show_emissions_reduction_plan():
@@ -86,7 +89,8 @@ def show_emissions_reduction_plan():
                 state_province_options,
                 disabled=False,
                 key="state_province_selector",
-                index=0
+                index=0,
+                on_change=reset_city
             )
 
     # --- COUNTY / DISTRICT ---
@@ -130,7 +134,8 @@ def show_emissions_reduction_plan():
                 county_district_options,
                 disabled=False,
                 key="county_district_selector",
-                index=0
+                index=0,
+                on_change=reset_city
             )
 
     # --- CITY ---
@@ -162,8 +167,6 @@ def show_emissions_reduction_plan():
                 WHERE {col} IN {val_str} AND city_name IS NOT NULL
             """
 
-            # print("DEBUG QUERY:\n", query)
-
             city_options = ['-- Select City --'] + sorted(
                 row[0] for row in con.execute(query).fetchall()
             )
@@ -173,16 +176,18 @@ def show_emissions_reduction_plan():
                 city_options,
                 disabled=False,
                 key="city_selector",
-                index=0
+                index=0,
+                on_change=reset_state_and_county
             )
+
 
     # ---------- DROPDOWN ROW 2 ---------
     benchmarking_group_dropdown, percentile_dropdown, year_dropdown, proportion_scale_bar = st.columns(4)
 
     with benchmarking_group_dropdown:    
         benchmarking_options = [
-            'Country',
-            'Global'
+            'Global',
+            'Country'
         ]
 
         benchmarking_help = (
@@ -272,13 +277,23 @@ def show_emissions_reduction_plan():
             format="%d%%"
         )
 
+    # --------- Calculate Display Text Based on Selections ----------
+    if selected_city and not selected_city.startswith("--") and selected_region != "Global":
+        display_region_text = f"{selected_city}, {selected_region}"
+    elif selected_county_district and not selected_county_district.startswith("--") and selected_region != "Global":
+        display_region_text = f"{selected_county_district}, {selected_region}"
+    elif selected_state_province and not selected_state_province.startswith("--") and selected_region != "Global":
+        display_region_text = f"{selected_state_province}, {selected_region}"
+    else:
+        display_region_text = selected_region
+
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ---------- Title ----------
     st.markdown(
         f"""
         <div style="text-align:center; font-size:36px; font-weight:600; margin-top:10px;">
-            Emissions Reduction Pathways: {selected_region}
+            Emissions Reduction Pathways: {display_region_text}
         </div>
         """,
         unsafe_allow_html=True
@@ -291,14 +306,14 @@ def show_emissions_reduction_plan():
     if selected_region == "Global":
         subject_phrase = "global emissions"
     else:
-        country_prefix = "the " if selected_region in use_the_countries else ""
-        subject_phrase = f"{country_prefix}{selected_region}'s facilities"
+        country_prefix = "the " if display_region_text in use_the_countries else ""
+        subject_phrase = f"{country_prefix}{display_region_text}'s facilities"
 
     summary_text = (
         f"Climate TRACE, a coalition of universities, NGOs, and tech companies founded by former "
         f"U.S. Vice President Al Gore, uses AI, satellites, and big data to estimate the emissions of "
         f"nearly every major emitting facility or plot of land worldwide. By analyzing its facilities, "
-        f"the coalition has produced the following {selected_region if selected_region != 'Global' else 'global'} "
+        f"the coalition has produced the following {display_region_text if display_region_text != 'Global' else 'global'} "
         f"emissions estimates for {selected_year}:"
     )
 
@@ -373,6 +388,7 @@ def show_emissions_reduction_plan():
     """
 
     df_pie = con.execute(query_country).df()
+    df_pie["emissions_quantity"] = df_pie["country_emissions_quantity"]
 
     total_emissions = format_number_short(df_pie["country_emissions_quantity"].sum())
     total_emissions_text = (
@@ -408,7 +424,7 @@ def show_emissions_reduction_plan():
 
     fig = px.pie(
         df_pie,
-        values="country_emissions_quantity",
+        values="emissions_quantity",
         names="sector",
         hole=0.2,
         title="Emissions Allocation",
@@ -418,11 +434,21 @@ def show_emissions_reduction_plan():
 
 
     # Update chart appearance
+    # fig.update_traces(
+    #     textinfo='percent+label',
+    #     textposition='outside',  # now outside, as intended
+    #     textfont_size=16,
+    #     pull=[0.02] * len(df_pie)  # Slight separation for clarity
+    # )
+
     fig.update_traces(
-        textinfo='percent+label',
-        textposition='outside',  # now outside, as intended
+        text = df_pie.apply(
+            lambda row: f"{row['sector']}<br>{format_number_short(row['emissions_quantity'])} tCO₂e", axis=1
+        ),
+        textinfo="text+percent",
+        textposition="outside",
         textfont_size=16,
-        pull=[0.02] * len(df_pie)  # Slight separation for clarity
+        pull=[0.02] * len(df_pie)
     )
 
     fig.update_layout(
@@ -433,7 +459,7 @@ def show_emissions_reduction_plan():
         height=600,
         width=800,
         showlegend=True,
-        margin=dict(t=80, b=40, l=40, r=40)
+        margin=dict(t=80, b=50, l=40, r=40)
     )
 
     # center the chart 
@@ -443,7 +469,7 @@ def show_emissions_reduction_plan():
 
     
     
-    sector_reduction_text = (f"2) &nbsp; By comparing specific {selected_region if selected_region != 'Global' else 'global'} "
+    sector_reduction_text = (f"2) &nbsp; By comparing specific {display_region_text if display_region_text != 'Global' else 'global'} "
                              f"facilities to best widely available technology facilities elsewhere, the coalition " 
                              f"has also identified specific emissions reduction opportunities in every sector:"
                             )
@@ -798,7 +824,7 @@ def show_emissions_reduction_plan():
 
     """
 
-    print(s4_query)
+    # print(s4_query)
 
     sentence_4_query = con.execute(s4_query).df()
 
@@ -829,7 +855,7 @@ def show_emissions_reduction_plan():
         sentence_3_and_4 = sentence_4
 
     reduction_text = f"""
-        Using Climate TRACE emissions data, CO2e emissions in {selected_region if selected_region != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
+        Using Climate TRACE emissions data, CO2e emissions in {display_region_text if display_region_text != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
 
         {sentence_2}
 
@@ -837,7 +863,7 @@ def show_emissions_reduction_plan():
     """
 
     st.markdown(f"""
-        ### A possible {selected_region if selected_region != 'Global' else 'Global'} Emissions Reduction Plan
+        ### A possible {display_region_text if display_region_text != 'Global' else 'Global'} Emissions Reduction Plan
 
         <div style="border: 1px solid rgba(100,100,100,0.3); padding: 0px 18px 10px 18px; border-radius: 6px; font-size: 16px; line-height: 1.4;">
             <p style="margin-top: 0px;">{reduction_text.replace('\n', '<br>')}</p>
@@ -850,7 +876,7 @@ def show_emissions_reduction_plan():
     st.markdown(
         f"""
         <div style="margin-top: 8px; font-size: 17px; line-height: 1.5;">
-            <em><strong>This analysis was based on estimated emissions and technology type of the most emitting facilities in {selected_region if selected_region != 'Global' else 'the world'}, including the following estimates:</strong></em>
+            <em><strong>This analysis was based on estimated emissions and technology type of the most emitting facilities in {display_region_text if display_region_text != 'Global' else 'the world'}, including the following estimates:</strong></em>
         </div>
         """,
         unsafe_allow_html=True
@@ -861,6 +887,7 @@ def show_emissions_reduction_plan():
     # ------------------------------- Asset Table ---------------------------------
     asset_table_query = f"""
         SELECT asset_name
+            , asset_type
             , country_name
             , sector
             , subsector
@@ -870,6 +897,7 @@ def show_emissions_reduction_plan():
         FROM (
             SELECT 
                 ae.asset_name,
+                ae.asset_type,
                 ae.country_name,
                 ae.sector,
                 ae.subsector,
@@ -886,6 +914,7 @@ def show_emissions_reduction_plan():
                 GREATEST(
                     0,
                     CASE 
+                        WHEN pct.{percentile_col} is null then 0
                         WHEN AVG(ae.ef_12_moer) IS NULL 
                             THEN (SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
                         ELSE ((SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
@@ -897,6 +926,7 @@ def show_emissions_reduction_plan():
                         GREATEST(
                             0,
                             CASE 
+                                WHEN pct.{percentile_col} is null then 0
                                 WHEN AVG(ae.ef_12_moer) IS NULL 
                                     THEN (SUM(ae.emissions_quantity) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
                                 ELSE ((SUM(ae.activity) * AVG(ae.ef_12_moer)) - SUM(ae.activity * pct.{percentile_col})) * ({selected_proportion} / 100.0)
@@ -915,10 +945,12 @@ def show_emissions_reduction_plan():
             
             GROUP BY 
                 ae.asset_name,
+                ae.asset_type,
                 ae.country_name,
                 ae.sector,
                 ae.subsector,
-                ae.asset_type
+                ae.asset_type,
+                pct.{percentile_col}
         ) assets
 
         where rank <= 20

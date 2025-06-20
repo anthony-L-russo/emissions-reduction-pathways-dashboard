@@ -109,9 +109,9 @@ def map_region_condition(region_selection):
 
 def format_number_short(n):
     if abs(n) >= 1_000_000_000:
-        return f"{n / 1e9:.2f}B"
+        return f"{n / 1e9:.1f}B"
     elif abs(n) >= 1_000_000:
-        return f"{n / 1e6:.2f}M"
+        return f"{n / 1e6:.1f}M"
     elif abs(n) >= 1_000:
         return f"{n / 1e3:.0f}K"
     else:
@@ -208,17 +208,17 @@ def bordered_metric(
 def map_percentile_col(selected_percentile):
 
     percentile_dict = {
-        "0th": "percentile_0",
-        "10th": "percentile_10",
-        "20th": "percentile_20",
-        "30th": "percentile_30",
-        "40th": "percentile_40",
-        "50th": "percentile_50",
-        "60th": "percentile_60",
-        "70th": "percentile_70",
-        "80th": "percentile_80",
-        "90th": "percentile_90",
-        "100th": "percentile_100"
+        # "0th": "percentile_0",
+        "10th": "percentile_avg_0_to_10",
+        "20th": "percentile_avg_10_to_20",
+        "30th": "percentile_avg_20_to_30",
+        "40th": "percentile_avg_30_to_40",
+        "50th": "percentile_avg_40_to_50",
+        "60th": "percentile_avg_50_to_60",
+        "70th": "percentile_avg_60_to_70",
+        "80th": "percentile_avg_70_to_80",
+        "90th": "percentile_avg_80_to_90",
+        "100th": "percentile_avg_90_to_100"
     }
 
     return percentile_dict[selected_percentile]
@@ -279,12 +279,12 @@ def data_add_moer(df, cond={}):
                 df_sec['eq_12_moer'] = df_sec['other2']
                 df_sec['ef_12_moer'] = df_sec['eq_12_moer']/df_sec['activity']
 
-            elif sec == 'aluminum':
-                df_sec['eq_12'] = df_sec['other2']
-                df_sec['ef_12'] = df_sec['other1']
+            # elif sec == 'aluminum':
+            #     df_sec['eq_12'] = df_sec['other2']
+            #     df_sec['ef_12'] = df_sec['other1']
 
-                df_sec['eq_12_moer'] = df_sec['other2'] + df_sec['activity'] * df_sec['other3'] * ((df_sec['ef_moer'].fillna(df_sec['other5'])) - df_sec['other5'])
-                df_sec['ef_12_moer'] = df_sec['eq_12_moer']/df_sec['activity']
+            #     df_sec['eq_12_moer'] = df_sec['other2'] + df_sec['activity'] * df_sec['other3'] * ((df_sec['ef_moer'].fillna(df_sec['other5'])) - df_sec['other5'])
+            #     df_sec['ef_12_moer'] = df_sec['eq_12_moer']/df_sec['activity']
 
             elif sec == 'cement':
                 df_sec['eq_12'] = df_sec['other2']
@@ -324,3 +324,10 @@ def is_country(region_selection):
     
     else:
         return True
+    
+def reset_city():
+    st.session_state["city_selector"] = "-- Select City --"
+
+def reset_state_and_county():
+    st.session_state["state_province_selector"] = "-- Select State / Province --"
+    st.session_state["county_district_selector"] = "-- Select County / District --"
