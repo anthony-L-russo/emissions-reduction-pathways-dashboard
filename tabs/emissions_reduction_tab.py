@@ -162,7 +162,7 @@ def show_emissions_reduction_plan():
                 WHERE {col} IN {val_str} AND city_name IS NOT NULL
             """
 
-            print("DEBUG QUERY:\n", query)
+            # print("DEBUG QUERY:\n", query)
 
             city_options = ['-- Select City --'] + sorted(
                 row[0] for row in con.execute(query).fetchall()
@@ -637,12 +637,6 @@ def show_emissions_reduction_plan():
 
     st.plotly_chart(fig, use_container_width=True)
 
-    
-
-
-
-
-
     generic_text = "Intervention types vary. For example, in road transportation, Climate TRACE " \
                    "considered the emissions reduction potential from electrifying transport. For " \
                    "elecricity, Climate TRACE considered the potential to replace fossil fuel power " \
@@ -748,7 +742,7 @@ def show_emissions_reduction_plan():
     # ----- Building Sentence 4 -------
     include_sectors = ", ".join(f"'{s.lower()}'" for s in top_emitting_sectors_list)
 
-    sentence_4_query = con.execute(f"""
+    s4_query = f"""
         with sector as (
             select sector
                 , sum(emissions_quantity) sector_emissions_quantity
@@ -767,7 +761,7 @@ def show_emissions_reduction_plan():
                 , subsector
                 , sum(emissions_quantity) subsector_emissions_quantity
 
-            from '{country_subsector_totals_path}'
+            from '{table}'
 
             {where_sql}
                 and lower(sector) <> 'power'
@@ -802,9 +796,12 @@ def show_emissions_reduction_plan():
         from subsector_rank
         where subsector_rank.subsector_rank <= 2
 
-    """).df()
+    """
 
-    # print(sentence_4_query)
+    print(s4_query)
+
+    sentence_4_query = con.execute(s4_query).df()
+
     sector_to_subsectors = defaultdict(list)
     for _, row in sentence_4_query.iterrows():
         sector_to_subsectors[row['sector']].append(row['subsector'])
