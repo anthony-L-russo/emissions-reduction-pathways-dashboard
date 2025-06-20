@@ -887,10 +887,10 @@ def show_emissions_reduction_plan():
     # ------------------------------- Asset Table ---------------------------------
     asset_table_query = f"""
         SELECT asset_name
-            , asset_type
             , country_name
             , sector
             , subsector
+            , asset_type
             , emissions_quantity
             , emissions_reduction_potential
         
@@ -944,11 +944,11 @@ def show_emissions_reduction_plan():
             {reduction_where_sql}
             
             GROUP BY 
-                ae.asset_name,
-                ae.asset_type,
+                ae.asset_name,                
                 ae.country_name,
                 ae.sector,
                 ae.subsector,
+                ae.asset_type,
                 ae.asset_type,
                 pct.{percentile_col}
         ) assets
