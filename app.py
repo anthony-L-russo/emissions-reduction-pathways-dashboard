@@ -37,7 +37,7 @@ st.markdown(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["Monthly Dashboard", "Emissions Reduction Plan"])
+tab1, tab2 = st.tabs(["Monthly Dashboard", "Benchmarking"])
 
 with tab1:
     show_monthly_dashboard()
