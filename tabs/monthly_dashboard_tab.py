@@ -147,7 +147,7 @@ def show_monthly_dashboard():
         val = region_condition['column_value']
 
         # Special handling if it's actually a country filter
-        if col == "country_name" and val in ("United States", "United States of America"):
+        if col == "country_name" and isinstance(val, list) and set(val) == {"United States", "United States of America"}:
             where_clauses.append("country_name IN ('United States', 'United States of America')")
         else:
             val_str = f"'{val}'" if isinstance(val, str) else str(val).upper()
@@ -175,6 +175,12 @@ def show_monthly_dashboard():
         ORDER BY year_month
     """
 
+    
+    print(query)
+    # print(region_condition)
+    # print(col)
+    # print(val)
+
 
     monthly_df = con.execute(query).df()
     monthly_df["year_month"] = pd.to_datetime(monthly_df["year_month"])
@@ -192,7 +198,12 @@ def show_monthly_dashboard():
 
     if selected_scope != 'Global':
         if region_condition:
-            df_stats = df_stats[df_stats[region_condition['column_name']] == region_condition['column_value']]
+            col = region_condition['column_name']
+            val = region_condition['column_value']
+            if isinstance(val, (list, tuple, set)):
+                df_stats = df_stats[df_stats[col].isin(val)]
+            else:
+                df_stats = df_stats[df_stats[col] == val]
         else:
             df_stats = df_stats[df_stats['country_name'] == selected_scope]
 
@@ -485,6 +496,14 @@ def show_monthly_dashboard():
             formatted_subsectors = ",".join([f"'{sub}'" for sub in selected_subsector_raw])
             subsector_condition = f"AND subsector IN ({formatted_subsectors})"
 
+    region_clause = (
+        f"AND {region_condition['column_name']} IN ('United States', 'United States of America')"
+            if region_condition and isinstance(region_condition['column_value'], list)
+        else f"AND {region_condition['column_name']} = '{region_condition['column_value']}'"
+            if region_condition
+        else ''
+    )
+
     query_country = f"""
         WITH latest_month AS (
             SELECT MAX(MAKE_DATE(year, month, 1)) AS max_date
@@ -502,13 +521,13 @@ def show_monthly_dashboard():
             AND MAKE_DATE(year, month, 1) >= cutoff_date
             {subsector_condition}
             {'AND sector = \'%s\'' % selected_sector_raw if selected_sector_raw else ''}
-            {f"AND {region_condition['column_name']} = '{region_condition['column_value']}'" if region_condition else ''}
+            {region_clause}
         GROUP BY year_month
         ORDER BY year_month
     """
 
     # --------------- Emissions Line Charts ---------------
-
+    print(query_country)
     country_df = con.execute(query_country).df()
 
     if not country_df.empty:
