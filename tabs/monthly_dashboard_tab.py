@@ -488,6 +488,7 @@ def show_monthly_dashboard():
     query_country = f"""
         WITH latest_month AS (
             SELECT MAX(MAKE_DATE(year, month, 1)) AS max_date
+                , date_trunc('year', MAX(MAKE_DATE(year, month, 1))) - INTERVAL '3 years' AS cutoff_date
             FROM '{country_subsector_totals_path}'
             WHERE gas = 'co2e_100yr'
             AND country_name IS NOT NULL
@@ -498,7 +499,7 @@ def show_monthly_dashboard():
         FROM '{country_subsector_totals_path}', latest_month
         WHERE gas = 'co2e_100yr'
             AND country_name IS NOT NULL
-            AND MAKE_DATE(year, month, 1) >= (max_date - INTERVAL '36' MONTH)
+            AND MAKE_DATE(year, month, 1) >= cutoff_date
             {subsector_condition}
             {'AND sector = \'%s\'' % selected_sector_raw if selected_sector_raw else ''}
             {f"AND {region_condition['column_name']} = '{region_condition['column_value']}'" if region_condition else ''}
@@ -644,7 +645,7 @@ def show_monthly_dashboard():
             'month_yoy_percent_change': "{:.1f}%",
             rename_map['emissions_slope_36_months_t_per_month']: "{:,.0f}"
         })
-        .applymap(color_change, subset=['mom_change', rename_map['emissions_slope_36_months_t_per_month']])
+        .applymap(color_change, subset=['mom_change', 'mom_percent_change', 'month_yoy_percent_change', rename_map['emissions_slope_36_months_t_per_month']])
     )
 
     st.dataframe(styled_df, use_container_width=True, height=450)
