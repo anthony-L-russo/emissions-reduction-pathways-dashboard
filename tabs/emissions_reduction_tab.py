@@ -432,15 +432,6 @@ def show_emissions_reduction_plan():
         color_discrete_map=sector_color_map  
     )
 
-
-    # Update chart appearance
-    # fig.update_traces(
-    #     textinfo='percent+label',
-    #     textposition='outside',  # now outside, as intended
-    #     textfont_size=16,
-    #     pull=[0.02] * len(df_pie)  # Slight separation for clarity
-    # )
-
     fig.update_traces(
         text = df_pie.apply(
             lambda row: f"{row['sector']}<br>{format_number_short(row['emissions_quantity'])} tCO₂e", axis=1
@@ -583,12 +574,8 @@ def show_emissions_reduction_plan():
         GROUP BY sector
     '''
 
-    # print(query_sector_reductions)
-
     df_stacked_bar = con.execute(query_sector_reductions).df()
 
-    # print(df_pie)
-    # print(df_stacked_bar)
 
     df_stacked_bar = pd.merge(
         df_pie[["sector","country_emissions_quantity"]],
@@ -823,8 +810,6 @@ def show_emissions_reduction_plan():
         where subsector_rank.subsector_rank <= 2
 
     """
-
-    # print(s4_query)
 
     sentence_4_query = con.execute(s4_query).df()
 

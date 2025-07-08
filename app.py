@@ -10,7 +10,7 @@ from tabs.emissions_reduction_tab import show_emissions_reduction_plan
 
 st.set_page_config(layout="wide")
 
-# Load CT logo
+# load CT logo
 def get_base64_of_bin_file(bin_file_path):
     with open(bin_file_path, 'rb') as f:
         data = f.read()
@@ -30,6 +30,9 @@ st.markdown(
         </div>
         <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
             The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong>{get_release_version(con, asset_path)}</strong></span> (excluding forestry), covering 660 million assets globally.
+        </p>
+        <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
+            This web application is for the internal use of Climate TRACE and its partners only. The data displayed may be revised, updated, rearranged, or deleted without prior communication to users, and is not warranted to be error free.
         </p>
         """,
         unsafe_allow_html=True
