@@ -1,5 +1,4 @@
 # UPDATE 4: MAKE PARQUET CONVERSION SCRIPT DELETE UNDERSCORE DATE AND MAKE STATIC FILE PATH
-# UPDATE 5: ADD GRAPHS (NOTION TASK)
 
 import streamlit as st
 import duckdb
@@ -31,12 +30,6 @@ def show_monthly_dashboard():
     """).fetchone()[0]
 
     earliest_year = (max_date.year) - 3
-
-    # spacer_col, download_col = st.columns([10, 1])
-
-    # with download_col:
-    #     st.markdown("<br>", unsafe_allow_html=True)
-    #     download_placeholder = st.empty()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -105,9 +98,24 @@ def show_monthly_dashboard():
         )
 
     with current_month_dropdown:
-        if max_date:
-            formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
-            st.selectbox("Latest Month", [formatted_date], disabled=True)
+        # Split this column into two sub-columns
+        #st.markdown("Latest Month") 
+        month_col, download_col = st.columns([2, 1])  # adjust ratio if needed
+
+        with month_col:
+            if max_date:
+                formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+                st.selectbox(
+                    label="Latest Month",
+                    options=[formatted_date],
+                    disabled=True,
+                    #label_visibility="collapsed"
+                )
+
+        with download_col:
+            # with download_col:
+            st.markdown("<div style='margin-top: 28px; margin-left: 6px;'></div>", unsafe_allow_html=True)
+            download_placeholder = st.empty()
 
 
     selected_subsector_raw = [subsector_map[label] for label in selected_subsector_label if label in subsector_map]
@@ -735,28 +743,33 @@ def show_monthly_dashboard():
             unsafe_allow_html=True
         )
 
-
-
     # loading da taframes into excel
-    # if not monthly_df.empty or not country_df.empty or not df_stats_filtered.empty or not df_annual.empty:
-    #     # Create dictionary of DataFrames to export
-    #     dfs_for_excel = {
-    #         "Country Total Emissions": country_df,
-    #         "Asset Total Emissions": monthly_df,
-    #         "Stats Data": df_stats_filtered,
-    #         "Annual Sector Emissions": df_annual
-    #     }
+    if not monthly_df.empty or not country_df.empty or not df_stats_filtered.empty or not df_monthly.empty:
+        # Create dictionary of DataFrames to export
+        dfs_for_excel = {
+            "Monthly Sector Emissions": df_monthly,
+            "Country Total Emissions": country_df,
+            "Asset Total Emissions": monthly_df,
+            "Stats Data": df_stats_filtered
+        }
 
-    #     # Use the utility function to create the Excel file
-    #     excel_file = create_excel_file(dfs_for_excel)
+        # Use the utility function to create the Excel file
+        excel_file = create_excel_file(dfs_for_excel)
 
-    #     # Fill in the placeholder with the actual download button
-    #     download_placeholder.download_button(
-    #         label="Download Data",
-    #         data=excel_file,
-    #         file_name="climate_trace_dashboard_data.xlsx",
-    #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    #         help="The downloaded data will represent your dropdown selections."
-    #     )
+        # Fill in the placeholder with the actual download button
+        download_placeholder.download_button(
+            label="   ⬇   Download Chart Data   ",
+            data=excel_file,
+            file_name="climate_trace_dashboard_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="The downloaded data will represent your dropdown selections."
+        )
+
+        # st.download_button( 
+        #         label="⬇ Download Data ",  # keep it tight – can use "Download" if you want
+        #         data="your,data,here\n1,2,3",  # Replace with real CSV
+        #         file_name="emissions_data.csv",
+        #         mime="text/csv"
+        #     )
 
     con.close()
