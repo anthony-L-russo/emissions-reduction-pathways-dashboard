@@ -10,7 +10,7 @@ from tabs.emissions_reduction_tab import show_emissions_reduction_plan
 
 st.set_page_config(layout="wide")
 
-# Load CT logo
+# load CT logo
 def get_base64_of_bin_file(bin_file_path):
     with open(bin_file_path, 'rb') as f:
         data = f.read()
@@ -26,10 +26,13 @@ st.markdown(
         f"""
         <div style='display: flex; align-items: center;'>
             <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
-            <h1 style="margin: 0; font-size: 2.8em;">Climate TRACE Monthly Dashboard</h1>
+            <h1 style="margin: 0; font-size: 2.8em;">Climate TRACE Benchmarking</h1>
         </div>
         <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
             The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong>{get_release_version(con, asset_path)}</strong></span> (excluding forestry), covering 660 million assets globally.
+        </p>
+        <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
+            This web application is for the internal use of Climate TRACE and its partners only. The data displayed may be revised, updated, rearranged, or deleted without prior communication to users, and is not warranted to be error free.
         </p>
         """,
         unsafe_allow_html=True
@@ -37,11 +40,11 @@ st.markdown(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["Monthly Dashboard", "Benchmarking"])
+tab1, tab2 = st.tabs(["Benchmarking", "Monthly Dashboard"])
 
 with tab1:
-    show_monthly_dashboard()
+    show_emissions_reduction_plan()
     # pass
 with tab2:
-    show_emissions_reduction_plan()
+    show_monthly_dashboard()
 

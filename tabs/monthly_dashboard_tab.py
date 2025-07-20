@@ -1,5 +1,4 @@
 # UPDATE 4: MAKE PARQUET CONVERSION SCRIPT DELETE UNDERSCORE DATE AND MAKE STATIC FILE PATH
-# UPDATE 5: ADD GRAPHS (NOTION TASK)
 
 import streamlit as st
 import duckdb
@@ -27,17 +26,10 @@ def show_monthly_dashboard():
 
     max_date = con.execute(f"""SELECT MAX(MAKE_DATE(year, month, 1)) AS max_date
             FROM '{country_subsector_totals_path}'
-            WHERE gas = 'co2e_100yr'
-            AND country_name IS NOT NULL
+            WHERE country_name IS NOT NULL
     """).fetchone()[0]
 
     earliest_year = (max_date.year) - 3
-
-    # spacer_col, download_col = st.columns([10, 1])
-
-    # with download_col:
-    #     st.markdown("<br>", unsafe_allow_html=True)
-    #     download_placeholder = st.empty()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -48,7 +40,8 @@ def show_monthly_dashboard():
     )
 
     df_stats_all = pd.read_parquet(country_subsector_stats_path)
-    df_stats_all = df_stats_all[df_stats_all['gas'] == 'co2e_100yr']
+    
+    df_stats_all = df_stats_all[df_stats_all['gas'].isin(['co2e_100yr', 'ch4'])]
 
     raw_sectors = sorted(df_stats_all['sector'].dropna().unique().tolist())
 
@@ -72,7 +65,8 @@ def show_monthly_dashboard():
         selected_sector_raw = sector_map.get(selected_sector_label)
 
     with gas_drodpdown:
-        selected_gas = st.selectbox("Gas", ["CO2e_100yr"], key="gas_selector")
+        selected_gas = st.selectbox("Gas", ["co2e_100yr", "ch4"], key="gas_selector")
+        df_stats_all = df_stats_all[df_stats_all['gas'] == selected_gas]
 
     # Filter subsectors based on selected sector
     if selected_sector_raw:
@@ -104,9 +98,24 @@ def show_monthly_dashboard():
         )
 
     with current_month_dropdown:
-        if max_date:
-            formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
-            st.selectbox("Latest Month", [formatted_date], disabled=True)
+        # Split this column into two sub-columns
+        #st.markdown("Latest Month") 
+        month_col, download_col = st.columns([2, 1])  # adjust ratio if needed
+
+        with month_col:
+            if max_date:
+                formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+                st.selectbox(
+                    label="Latest Month",
+                    options=[formatted_date],
+                    disabled=True,
+                    #label_visibility="collapsed"
+                )
+
+        with download_col:
+            # with download_col:
+            st.markdown("<div style='margin-top: 28px; margin-left: 6px;'></div>", unsafe_allow_html=True)
+            download_placeholder = st.empty()
 
 
     selected_subsector_raw = [subsector_map[label] for label in selected_subsector_label if label in subsector_map]
@@ -128,7 +137,7 @@ def show_monthly_dashboard():
     asset_scope = country_name_map_asset.get(selected_scope, selected_scope)
 
     # Build query for asset-level time series
-    where_clauses = ["gas = 'co2e_100yr'"]
+    where_clauses = [f"gas = '{selected_gas}'"]
 
     # Sector/Subsector filters
     if selected_sector_raw:
@@ -174,13 +183,7 @@ def show_monthly_dashboard():
         GROUP BY year_month
         ORDER BY year_month
     """
-
-    
-    print(query)
-    # print(region_condition)
-    # print(col)
-    # print(val)
-
+    # print(query)
 
     monthly_df = con.execute(query).df()
     monthly_df["year_month"] = pd.to_datetime(monthly_df["year_month"])
@@ -190,7 +193,9 @@ def show_monthly_dashboard():
     # Filter stats for table view
     if selected_sector_raw:
         df_stats_all = df_stats_all[df_stats_all['sector'] == selected_sector_raw]
+    
     df_stats = df_stats_all[df_stats_all['country_name'].notna()].copy()
+    
     df_stats['country_name'] = df_stats['country_name'].replace({
         'United States of America': 'United States',
         'Russian Federation': 'Russia'
@@ -304,10 +309,13 @@ def show_monthly_dashboard():
         else ""
     )
 
+    gas_display = {'co2e_100yr': 'tCO₂e', 'ch4': 'tCH₄'}
+    gas_unit = gas_display.get(selected_gas, selected_gas)
+
     st.markdown(
         f"<div style='font-size: 1.1em; line-height: 1.6em; margin: 16px 0;'>"
         f"In {latest_month}, {selected_scope}{sector_text}{subsector_text} emissions were "
-        f"<span style='font-weight: bold; font-style: italic; text-decoration: underline;'>{emissions_value:,.0f}</span> tCO₂e. "
+        f"<span style='font-weight: bold; font-style: italic; text-decoration: underline;'>{emissions_value:,.0f}</span> {gas_unit}. "
         f"This represents {mom_text} compared to the previous month. This also represents {yoy_text} compared to the same month last year."
         f"</div>",
         unsafe_allow_html=True
@@ -335,7 +343,7 @@ def show_monthly_dashboard():
         bordered_metric("Selected Subsectors", display_value, tooltip_enabled=True, tooltip_value=tooltip_value)
 
     with col3:
-        bordered_metric("Total Emissions tCO2e", format_number_short(emissions_value), value_color="red")
+        bordered_metric(f"Total Emissions {gas_unit}", format_number_short(emissions_value), value_color="red")
 
     with col4:
         if mom_delta == 0.0:
@@ -376,7 +384,7 @@ def show_monthly_dashboard():
             sector,
             SUM(emissions_quantity) AS emissions_quantity
         FROM '{country_subsector_totals_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
             AND year >= {earliest_year}
             and country_name is not null
     """
@@ -419,7 +427,7 @@ def show_monthly_dashboard():
             y="emissions_quantity",
             color="sector",
             labels={
-                "emissions_quantity": "Emissions (tCO₂e)",
+                "emissions_quantity": f"Emissions ({gas_unit})",
                 "year_month_str": "Month",
                 "sector": "Sector"
             }
@@ -486,7 +494,7 @@ def show_monthly_dashboard():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Plotting
-    st.subheader(f"Emissions Over Time (tCO2e) - {selected_scope} | {selected_subsector_label}")
+    st.subheader(f"Emissions Over Time ({gas_unit}) - {selected_scope} | {selected_subsector_label}")
 
     subsector_condition = ""
     if selected_subsector_raw:
@@ -516,7 +524,7 @@ def show_monthly_dashboard():
             MAKE_DATE(year, month, 1) AS year_month,
             SUM(emissions_quantity) AS country_emissions_quantity
         FROM '{country_subsector_totals_path}', latest_month
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
             AND country_name IS NOT NULL
             AND MAKE_DATE(year, month, 1) >= cutoff_date
             {subsector_condition}
@@ -527,7 +535,6 @@ def show_monthly_dashboard():
     """
 
     # --------------- Emissions Line Charts ---------------
-    print(query_country)
     country_df = con.execute(query_country).df()
 
     if not country_df.empty:
@@ -736,28 +743,26 @@ def show_monthly_dashboard():
             unsafe_allow_html=True
         )
 
-
-
     # loading da taframes into excel
-    # if not monthly_df.empty or not country_df.empty or not df_stats_filtered.empty or not df_annual.empty:
-    #     # Create dictionary of DataFrames to export
-    #     dfs_for_excel = {
-    #         "Country Total Emissions": country_df,
-    #         "Asset Total Emissions": monthly_df,
-    #         "Stats Data": df_stats_filtered,
-    #         "Annual Sector Emissions": df_annual
-    #     }
+    if not monthly_df.empty or not country_df.empty or not df_stats_filtered.empty or not df_monthly.empty:
+        # Create dictionary of DataFrames to export
+        dfs_for_excel = {
+            "Monthly Sector Emissions": df_monthly,
+            "Country Total Emissions": country_df,
+            "Asset Total Emissions": monthly_df,
+            "Stats Data": df_stats_filtered
+        }
 
-    #     # Use the utility function to create the Excel file
-    #     excel_file = create_excel_file(dfs_for_excel)
+        # Use the utility function to create the Excel file
+        excel_file = create_excel_file(dfs_for_excel)
 
-    #     # Fill in the placeholder with the actual download button
-    #     download_placeholder.download_button(
-    #         label="Download Data",
-    #         data=excel_file,
-    #         file_name="climate_trace_dashboard_data.xlsx",
-    #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    #         help="The downloaded data will represent your dropdown selections."
-    #     )
+        # Fill in the placeholder with the actual download button
+        download_placeholder.download_button(
+            label="   ⬇   Download Chart Data   ",
+            data=excel_file,
+            file_name="climate_trace_dashboard_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="The downloaded data will represent your dropdown selections."
+        )
 
     con.close()

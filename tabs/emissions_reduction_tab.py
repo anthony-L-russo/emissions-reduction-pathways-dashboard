@@ -182,7 +182,7 @@ def show_emissions_reduction_plan():
 
 
     # ---------- DROPDOWN ROW 2 ---------
-    benchmarking_group_dropdown, percentile_dropdown, year_dropdown, proportion_scale_bar = st.columns(4)
+    benchmarking_group_dropdown, percentile_dropdown, proportion_scale_bar, year_dropdown  = st.columns(4)
 
     with benchmarking_group_dropdown:    
         benchmarking_options = [
@@ -248,17 +248,6 @@ def show_emissions_reduction_plan():
 
         percentile_col = map_percentile_col(selected_percentile)
 
-    with year_dropdown:
-        # only displaying 2024 data for now, will update to query
-        year_options = 2024
-
-        selected_year = st.selectbox(
-            "Year",
-            year_options,
-            disabled=True,
-            key="year_selector"
-        )
-
     with proportion_scale_bar:
         proportion_help = (
             "This input defines the fraction of each asset’s emissions reduction potential to include in the plan. "
@@ -277,6 +266,40 @@ def show_emissions_reduction_plan():
             format="%d%%"
         )
 
+
+    with year_dropdown:
+        year_col, download_col = st.columns([2, 1])  # Adjust ratio as needed
+
+        with year_col:
+            # Only displaying 2024 data for now, will update to query
+            year_options = [2024]  # Needs to be a list for selectbox
+            selected_year = st.selectbox(
+                "Year",
+                year_options,
+                disabled=True,
+                key="year_selector"
+            )
+
+        with download_col:
+            st.markdown(
+                """
+                <style>
+                .stDownloadButton button {
+                    white-space: nowrap;
+                    margin-left: -8px;
+                }
+                .custom-download-space {
+                    padding-top: 28px;
+                }
+                </style>
+                <div class="custom-download-space"></div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            download_placeholder = st.empty()
+
+    
     # --------- Calculate Display Text Based on Selections ----------
     if selected_city and not selected_city.startswith("--") and selected_region != "Global":
         display_region_text = f"{selected_city}, {selected_region}"
@@ -432,15 +455,6 @@ def show_emissions_reduction_plan():
         color_discrete_map=sector_color_map  
     )
 
-
-    # Update chart appearance
-    # fig.update_traces(
-    #     textinfo='percent+label',
-    #     textposition='outside',  # now outside, as intended
-    #     textfont_size=16,
-    #     pull=[0.02] * len(df_pie)  # Slight separation for clarity
-    # )
-
     fig.update_traces(
         text = df_pie.apply(
             lambda row: f"{row['sector']}<br>{format_number_short(row['emissions_quantity'])} tCO₂e", axis=1
@@ -583,12 +597,8 @@ def show_emissions_reduction_plan():
         GROUP BY sector
     '''
 
-    # print(query_sector_reductions)
-
     df_stacked_bar = con.execute(query_sector_reductions).df()
 
-    # print(df_pie)
-    # print(df_stacked_bar)
 
     df_stacked_bar = pd.merge(
         df_pie[["sector","country_emissions_quantity"]],
@@ -824,8 +834,6 @@ def show_emissions_reduction_plan():
 
     """
 
-    # print(s4_query)
-
     sentence_4_query = con.execute(s4_query).df()
 
     sector_to_subsectors = defaultdict(list)
@@ -980,6 +988,27 @@ def show_emissions_reduction_plan():
         use_container_width=True,
         height=table_height
     )
+
+
+    if not df_pie.empty or not df_stacked_bar.empty or not asset_table_df.empty:
+        # Create dictionary of DataFrames to export
+        dfs_for_excel = {
+            "Sector Emissions": df_pie,
+            "Sector Reduction Data": df_stacked_bar,
+            "Asset Reduction Data": asset_table_df,
+        }
+
+        # Use the utility function to create the Excel file
+        benchmarking_excel_file = create_excel_file(dfs_for_excel)
+
+        # Fill in the placeholder with the actual download button
+        download_placeholder.download_button(
+            label="⬇ Download Data",
+            data=benchmarking_excel_file,
+            file_name="climate_trace_benchmarking_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="The downloaded data will represent your dropdown selections."
+        )
 
     con.close()
     
