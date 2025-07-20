@@ -765,11 +765,4 @@ def show_monthly_dashboard():
             help="The downloaded data will represent your dropdown selections."
         )
 
-        # st.download_button( 
-        #         label="⬇ Download Data ",  # keep it tight – can use "Download" if you want
-        #         data="your,data,here\n1,2,3",  # Replace with real CSV
-        #         file_name="emissions_data.csv",
-        #         mime="text/csv"
-        #     )
-
     con.close()
