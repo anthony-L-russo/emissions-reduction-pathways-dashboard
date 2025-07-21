@@ -26,7 +26,7 @@ st.markdown(
         f"""
         <div style='display: flex; align-items: center;'>
             <img src="data:image/png;base64,{logo_base64}" width="50" style="margin-right: 10px;" />
-            <h1 style="margin: 0; font-size: 2.8em;">Climate TRACE Benchmarking</h1>
+            <h1 style="margin: 0; font-size: 2.8em;">Climate TRACE Emissions Reduction Pathways</h1>
         </div>
         <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
             The data in this dashboard is from Climate TRACE release <span style='color: red;'><strong>{get_release_version(con, asset_path)}</strong></span> (excluding forestry), covering 660 million assets globally.
@@ -40,7 +40,7 @@ st.markdown(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["Benchmarking", "Monthly Dashboard"])
+tab1, tab2 = st.tabs(["Regional Opportunities", "Monthly Dashboard"])
 
 with tab1:
     show_emissions_reduction_plan()
