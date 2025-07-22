@@ -1,0 +1,29 @@
+.git/
+.git/attributes
+__pycache__/
+.envrc
+.venv/
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+
+# Ignore local virtual environments
+.venv/
+venv/
+
+# Ignore test and old data folders
+data/test/
+data/old_data/
+
+# Ignore Jupyter notebooks (not needed in prod)
+*.ipynb
+
+# Ignore any local logs
+*.log
+
+# Ignore git-related files
+.git/
+.gitignore
+
+*.md
