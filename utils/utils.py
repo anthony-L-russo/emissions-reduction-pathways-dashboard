@@ -236,7 +236,7 @@ def data_add_moer(df, cond={}):
             cond[k] = v
 
     #Get MOER data (ask Zoheyr)  --  *** ADD codes to check every asset is covered ***
-    fpath = 'data/moer/asset_moer_2023.parquet'
+    fpath = 'data/static/asset_moer_2023.parquet'
     df_moer = pd.read_parquet(fpath)
     df_moer['ef_moer'] = df_moer['moer_avg']*0.4536/1000 #Convert lbs to tons
 

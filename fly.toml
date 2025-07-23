@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for climate-trace-emissions-reduction-pathways on 2025-07-22T10:44:09-06:00
+# fly.toml app configuration file generated for climate-trace-emissions-reduction-pathways-beta on 2025-07-22T14:52:13-06:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'climate-trace-emissions-reduction-pathways'
+app = 'climate-trace-emissions-reduction-pathways-beta'
 primary_region = 'den'
 
 [build]

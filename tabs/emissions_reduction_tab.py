@@ -641,7 +641,7 @@ def show_emissions_reduction_plan():
         y=df_stacked_bar["emissions_reduction_potential"],
         marker_color="#C0C0C0",
         customdata=df_stacked_bar["formatted_avoided"],
-        hovertemplate='<b>%{x}</b><br>Avoided Emissions: %{customdata} tCO₂e<extra></extra>'
+        hovertemplate='<b>%{x}</b><br>Reduction Potential: %{customdata} tCO₂e<extra></extra>'
     )
 
     fig.update_layout(
@@ -1005,7 +1005,7 @@ def show_emissions_reduction_plan():
         download_placeholder.download_button(
             label="⬇ Download Data",
             data=benchmarking_excel_file,
-            file_name="climate_trace_benchmarking_data.xlsx",
+            file_name="export_climate_trace_emissions_reduction.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             help="The downloaded data will represent your dropdown selections."
         )
