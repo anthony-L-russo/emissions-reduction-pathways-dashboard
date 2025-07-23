@@ -1,5 +1,4 @@
 
-
 CONFIG = {
     "asset_path": "data/asset_emissions_country_subsector.parquet",
     "country_subsector_stats_path": "data/country_subsector_emissions_statistics_202506.parquet",
