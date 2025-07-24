@@ -977,7 +977,7 @@ def show_emissions_reduction_plan():
                 lambda val: "color: green", subset=["emissions_reduction_potential"]
             )
 
-    st.markdown("### Top 20 Assets by Emissions Reduction Potential (Annual)")
+    st.markdown("### Top 20 Assets by Annual Reduction Potential")
 
     row_height = 35  # pixels per row (adjust as needed)
     num_rows = 20
