@@ -646,7 +646,7 @@ def show_emissions_reduction_plan():
 
     fig.update_layout(
         barmode='stack',
-        title="Sector Reduction Opportunities",
+        title="Sector Reduction Opportunities (Annual)",
         title_font=dict(
             size=22,
             family="Arial",
@@ -977,7 +977,7 @@ def show_emissions_reduction_plan():
                 lambda val: "color: green", subset=["emissions_reduction_potential"]
             )
 
-    st.markdown("### Top 20 Assets by Emissions Reduction Potential")
+    st.markdown("### Top 20 Assets by Emissions Reduction Potential (Annual)")
 
     row_height = 35  # pixels per row (adjust as needed)
     num_rows = 20
