@@ -968,13 +968,15 @@ def show_emissions_reduction_plan():
 
     asset_table_df = con.execute(asset_table_query).df()
 
-    asset_table_df["emissions_quantity"] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
-    asset_table_df["emissions_reduction_potential"] = asset_table_df["emissions_reduction_potential"].apply(lambda x: f"{round(x):,}")  
+    # Current (2024) Estimated Emissions (tCO2e)
+    # Estimated Emissions Reduction Potential Per Year (tCO2e)
+    asset_table_df["2024 Emissions (tCO2e)"] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
+    asset_table_df["Estimated Reduction Potential Per Year (tCO2e)"] = asset_table_df["emissions_reduction_potential"].apply(lambda x: f"{round(x):,}")  
 
     styled_df = asset_table_df.style.applymap(
-        lambda val: "color: red", subset=["emissions_quantity"]
+        lambda val: "color: red", subset=["2024 Emissions (tCO2e)"]
             ).applymap(
-                lambda val: "color: green", subset=["emissions_reduction_potential"]
+                lambda val: "color: green", subset=["Estimated Reduction Potential Per Year (tCO2e)"]
             )
 
     st.markdown("### Top 20 Assets by Annual Reduction Potential")
