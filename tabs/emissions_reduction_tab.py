@@ -961,7 +961,7 @@ def show_emissions_reduction_plan():
                 pct.{percentile_col}
         ) assets
 
-        where rank <= 20
+        where rank <= 100
 
         order by rank asc
     """
@@ -981,7 +981,7 @@ def show_emissions_reduction_plan():
                 lambda val: "color: green", subset=["Estimated Reduction Potential Per Year (tCO2e)"]
             )
 
-    st.markdown("### Top 20 Assets by Annual Reduction Potential")
+    st.markdown("### Top 100 Assets by Annual Reduction Potential")
 
     row_height = 35  # pixels per row (adjust as needed)
     num_rows = 20
