@@ -430,16 +430,16 @@ def show_emissions_reduction_plan():
 
     # --------------------------- Visualize Sector Pie ---------------------------
     sector_color_map = {
-        "agriculture": "#0BCF42",
-        "buildings": "#03A0E3",
-        "fluorinated-gases": "#D3D3D3",
-        "forestry-and-land-use": "#E8516C",
-        "fossil-fuel-operations": "#FF6F42",
-        "manufacturing": "#9554FF",
-        "mineral-extraction": "#4380F5",
-        "power": "#407076",
-        "transportation": "#FBBA1A",
-        "waste": "#BBD421"
+        "agriculture": "#E8516C",                  # from --color-agriculture
+        "buildings": "#03A0E3",                   # from --color-buildings = --color-seablue
+        "fluorinated-gases": "#B6B4B4",           # from --color-fluorinated-gases
+        "forestry-and-land-use": "#779608",       # from --color-forestry-and-land-use
+        "fossil-fuel-operations": "#FF6F42",      # from --color-fossil-fuel-operations = --color-orange
+        "manufacturing": "#9554FF",               # from --color-manufacturing = --color-violet
+        "mineral-extraction": "#4380F5",          # from --color-mineral-extraction
+        "power": "#56979F",                       # from --color-power
+        "transportation": "#FBBA14",              # from --color-transportation = --color-yellow
+        "waste": "#BBD421"                        # from --color-waste = --color-lightgreen
     }
 
     df_pie["sector"] = df_pie["sector"].str.lower()
