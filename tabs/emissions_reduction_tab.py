@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import duckdb
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -607,6 +608,13 @@ def show_emissions_reduction_plan():
         how="outer"
     )
 
+    # capping reduction potential at total emissions if it exceeds total emissions
+    df_stacked_bar["emissions_reduction_potential"] = np.where(
+        df_stacked_bar["emissions_reduction_potential"] > df_stacked_bar["country_emissions_quantity"],
+        df_stacked_bar["country_emissions_quantity"],
+        df_stacked_bar["emissions_reduction_potential"]
+    )
+
     df_stacked_bar['static_emissions_q'] = df_stacked_bar["country_emissions_quantity"] - df_stacked_bar["emissions_reduction_potential"]
 
     df_stacked_bar["total"] = (
@@ -624,6 +632,8 @@ def show_emissions_reduction_plan():
     df_stacked_bar["formatted_static"] = df_stacked_bar["static_emissions_q"].apply(format_number_short)
     df_stacked_bar["formatted_avoided"] = df_stacked_bar["emissions_reduction_potential"].apply(format_number_short)
 
+    print(df_stacked_bar)
+
     fig = go.Figure()
 
     fig.add_bar(
@@ -636,7 +646,7 @@ def show_emissions_reduction_plan():
     )
 
     fig.add_bar(
-        name='Avoided Emissions',
+        name='Reduction Potential (tCO2e)',
         x=df_stacked_bar["sector"],
         y=df_stacked_bar["emissions_reduction_potential"],
         marker_color="#C0C0C0",

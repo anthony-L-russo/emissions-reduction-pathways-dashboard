@@ -748,7 +748,7 @@ def show_monthly_dashboard():
         # Create dictionary of DataFrames to export
         dfs_for_excel = {
             "Monthly Sector Emissions": df_monthly,
-            "Country Total Emissions": country_df,
+            "Cumulative Emissions": country_df,
             "Asset Total Emissions": monthly_df,
             "Stats Data": df_stats_filtered
         }
