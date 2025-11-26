@@ -77,7 +77,7 @@ def show_abatement_curve():
             selected_region = st.multiselect(
                 "Region/Country", 
                 region_country_options, 
-                key="selected_region_RO",
+                key="selected_region_AC",
                 help=region_help,
                 default="Global",
                 on_change=mark_ac_recompute
@@ -111,7 +111,7 @@ def show_abatement_curve():
                 "Select by",
                 ["State/Province + County", "City"],
                 horizontal=True,
-                key="selection_mode_RO",
+                key="selection_mode_AC",
                 on_change=mark_ac_recompute
                 )
         
@@ -123,7 +123,7 @@ def show_abatement_curve():
                         "State / Province",
                         state_province_options,
                         disabled=True,
-                        key="state_province_selector_RO",
+                        key="state_province_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -138,7 +138,7 @@ def show_abatement_curve():
                         "State / Province",
                         state_province_options,
                         disabled=False,
-                        key="state_province_selector_RO",
+                        key="state_province_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
@@ -148,7 +148,7 @@ def show_abatement_curve():
                         "County / District",
                         county_district_options,
                         disabled=True,
-                        key="county_district_selector_RO",
+                        key="county_district_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -169,7 +169,7 @@ def show_abatement_curve():
                         "County / District",
                         county_district_options,
                         disabled=False,
-                        key="county_district_selector_RO",
+                        key="county_district_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
@@ -180,7 +180,7 @@ def show_abatement_curve():
                         "City",
                         city_options,
                         disabled=True,
-                        key="city_selector_RO",
+                        key="city_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -212,7 +212,7 @@ def show_abatement_curve():
                         "City",
                         city_options,
                         disabled=False,
-                        key="city_selector_RO",
+                        key="city_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
@@ -309,7 +309,7 @@ def show_abatement_curve():
                 program_options,
                 horizontal=True,
                 help=program_help,
-                key="selection_program_RO",
+                key="selection_program_AC",
                 on_change=mark_ac_recompute
                 )
 

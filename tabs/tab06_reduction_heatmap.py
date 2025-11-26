@@ -118,7 +118,12 @@ def show_reduction_heatmap():
     if selected_state_province not in ['-- Select State / Province --', 'Select a Country to Enable']:
         state_selected_bool = True
         
-
+    selected_metric = st.radio(
+        "Select metric",
+        ['reductions', 'emissions_quantity'],
+        horizontal=True,
+        key="selection_metric_HM"
+    )
 
     heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
                                      state_selected_bool=state_selected_bool,
@@ -127,7 +132,8 @@ def show_reduction_heatmap():
                                      selected_state_province=selected_state_province,
                                      annual_asset_path=annual_asset_path,
                                      gadm_1_path=gadm_1_path,
-                                     gadm_2_path=gadm_2_path)
+                                     gadm_2_path=gadm_2_path,
+                                     selected_metric=selected_metric)
     
     # print(heatmap_sql['sector_summary'])
     

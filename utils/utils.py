@@ -1266,8 +1266,8 @@ def mark_ro_recompute():
 
 def mark_ac_recompute():
     st.session_state.needs_recompute_abatement_curve = True
-    if not st.session_state["selected_region_RO"]:
-        st.session_state["selected_region_RO"] = ["Global"]
+    if not st.session_state["selected_region_AC"]:
+        st.session_state["selected_region_AC"] = ["Global"]
     st.session_state["selected_assets"] = []
 
 def mark_mt_recompute():
