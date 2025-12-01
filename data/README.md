@@ -88,12 +88,13 @@ Example branch name: `data-update-V5.2.0`
   - Merge branch into `stage` branch. If using the github UI, be careful, it usually defaults to try to merge into the `main` branch. Make sure you set it to merge into `stage`
 
 ### 2.6&nbsp;&nbsp;&nbsp;Reboot the `stage` App in Streamlit 
-  - It can be rebooted by signing into [Streamlit](https://streamlit.io/) or directly in the [stage UI](https://emissions-reduction-pathways-dashboard-stage.streamlit.app/) (as long as you are already signed into Streamlit and have push access to this repo).
+  - It can be rebooted by signing into [Streamlit](https://streamlit.io/) or directly in the [stage UI](https://climate-trace-sandbox-stage.streamlit.app/) (as long as you are already signed into Streamlit and have push access to this repo).
   - Test new data in its staging environment
   - Use Monthly Trends module for Monthly Press Release
 
 ### 2.7&nbsp;&nbsp;&nbsp;For deployment into prod/main via Fly.io, see the Deployment Instructions and start at the [Data Only Merge section](https://github.com/anthony-L-russo/emissions-reduction-pathways-dashboard/tree/stage?tab=readme-ov-file#2%EF%B8%8F%E2%83%A3-data-only-merge-monthly-data-releases)
       
+
 
 
 
