@@ -118,16 +118,31 @@ def show_reduction_heatmap():
     if selected_state_province not in ['-- Select State / Province --', 'Select a Country to Enable']:
         state_selected_bool = True
         
+    # selected_metric = st.radio(
+    #     "Select metric",
+    #     ['reductions', 'emissions_quantity'],
+    #     horizontal=True,
+    #     key="selection_metric_HM"
+    # )
 
-
+    # heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
+    #                                  state_selected_bool=state_selected_bool,
+    #                                  g20_bool=g20_bool,
+    #                                  region_condition=region_condition,
+    #                                  selected_state_province=selected_state_province,
+    #                                  annual_asset_path=annual_asset_path,
+    #                                  gadm_1_path=gadm_1_path,
+    #                                  gadm_2_path=gadm_2_path,
+    #                                  selected_metric=selected_metric)
+    
     heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
-                                     state_selected_bool=state_selected_bool,
-                                     g20_bool=g20_bool,
-                                     region_condition=region_condition,
-                                     selected_state_province=selected_state_province,
-                                     annual_asset_path=annual_asset_path,
-                                     gadm_1_path=gadm_1_path,
-                                     gadm_2_path=gadm_2_path)
+                                    state_selected_bool=state_selected_bool,
+                                    g20_bool=g20_bool,
+                                    region_condition=region_condition,
+                                    selected_state_province=selected_state_province,
+                                    annual_asset_path=annual_asset_path,
+                                    gadm_1_path=gadm_1_path,
+                                    gadm_2_path=gadm_2_path)
     
     # print(heatmap_sql['sector_summary'])
     

@@ -77,7 +77,7 @@ def show_abatement_curve():
             selected_region = st.multiselect(
                 "Region/Country", 
                 region_country_options, 
-                key="selected_region_RO",
+                key="selected_region_AC",
                 help=region_help,
                 default="Global",
                 on_change=mark_ac_recompute
@@ -111,7 +111,7 @@ def show_abatement_curve():
                 "Select by",
                 ["State/Province + County", "City"],
                 horizontal=True,
-                key="selection_mode_RO",
+                key="selection_mode_AC",
                 on_change=mark_ac_recompute
                 )
         
@@ -123,7 +123,7 @@ def show_abatement_curve():
                         "State / Province",
                         state_province_options,
                         disabled=True,
-                        key="state_province_selector_RO",
+                        key="state_province_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -138,7 +138,7 @@ def show_abatement_curve():
                         "State / Province",
                         state_province_options,
                         disabled=False,
-                        key="state_province_selector_RO",
+                        key="state_province_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
@@ -148,7 +148,7 @@ def show_abatement_curve():
                         "County / District",
                         county_district_options,
                         disabled=True,
-                        key="county_district_selector_RO",
+                        key="county_district_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -169,7 +169,7 @@ def show_abatement_curve():
                         "County / District",
                         county_district_options,
                         disabled=False,
-                        key="county_district_selector_RO",
+                        key="county_district_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
@@ -180,7 +180,7 @@ def show_abatement_curve():
                         "City",
                         city_options,
                         disabled=True,
-                        key="city_selector_RO",
+                        key="city_selector_AC",
                         on_change=mark_ac_recompute
                     )
                 else:
@@ -212,12 +212,13 @@ def show_abatement_curve():
                         "City",
                         city_options,
                         disabled=False,
-                        key="city_selector_RO",
+                        key="city_selector_AC",
                         on_change=mark_ac_recompute
                     )
 
         # create SQL filters based on geography selection
         asset_geography_filters = []
+        asset_geography_filters.append("most_granular IS NOT False")
         total_geography_filters = []
         total_path = gadm_0_path
 
@@ -230,20 +231,19 @@ def show_abatement_curve():
                 if selected_state_province:
                     sanitized_states = [str(v).replace("'", "''") for v in selected_state_province]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_states) + ")"
-                    asset_geography_filters.append("most_granular IS NOT False")
                     asset_geography_filters.append(f"gadm_1_name IN {val_str}")
                     total_geography_filters = [f"gadm_1_corrected_name IN {val_str}"]
                     total_path = gadm_1_path
                 if selected_county_district:
                     sanitized_counties = [str(v).replace("'", "''") for v in selected_county_district]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_counties) + ")"
-                    asset_geography_filters.append("most_granular IS NOT False")
                     asset_geography_filters.append(f"gadm_2_name IN {val_str}")
                     total_geography_filters = [f"gadm_2_corrected_name IN {val_str}"]
                     total_path = gadm_2_path
             else:
 
                 if selected_city:
+                    asset_geography_filters.remove("most_granular IS NOT False")
                     sanitized_city = [str(v).replace("'", "''") for v in selected_city]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_city) + ")"
                     asset_geography_filters.append(f"city_name IN {val_str}")
@@ -253,8 +253,6 @@ def show_abatement_curve():
         total_geography_filters_clause = " AND ".join(total_geography_filters) if total_geography_filters else "1=1"
         asset_geography_filters_clause = " AND ".join(asset_geography_filters) if asset_geography_filters else "1=1"
         asset_geography_filters_clause = asset_geography_filters_clause.replace("iso3_country", "ae.iso3_country")
-        print(total_geography_filters_clause)
-        print(asset_geography_filters_clause)
 
     ##### DROPDOWN MENU: SECTOR, SUBSECTOR, PROGRAM -------
     # add drop-down options for filtering data + program view for x/y axis
@@ -309,7 +307,7 @@ def show_abatement_curve():
                 program_options,
                 horizontal=True,
                 help=program_help,
-                key="selection_program_RO",
+                key="selection_program_AC",
                 on_change=mark_ac_recompute
                 )
 
