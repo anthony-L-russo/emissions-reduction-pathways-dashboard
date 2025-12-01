@@ -218,6 +218,7 @@ def show_abatement_curve():
 
         # create SQL filters based on geography selection
         asset_geography_filters = []
+        asset_geography_filters.append("most_granular IS NOT False")
         total_geography_filters = []
         total_path = gadm_0_path
 
@@ -230,20 +231,19 @@ def show_abatement_curve():
                 if selected_state_province:
                     sanitized_states = [str(v).replace("'", "''") for v in selected_state_province]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_states) + ")"
-                    asset_geography_filters.append("most_granular IS NOT False")
                     asset_geography_filters.append(f"gadm_1_name IN {val_str}")
                     total_geography_filters = [f"gadm_1_corrected_name IN {val_str}"]
                     total_path = gadm_1_path
                 if selected_county_district:
                     sanitized_counties = [str(v).replace("'", "''") for v in selected_county_district]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_counties) + ")"
-                    asset_geography_filters.append("most_granular IS NOT False")
                     asset_geography_filters.append(f"gadm_2_name IN {val_str}")
                     total_geography_filters = [f"gadm_2_corrected_name IN {val_str}"]
                     total_path = gadm_2_path
             else:
 
                 if selected_city:
+                    asset_geography_filters.remove("most_granular IS NOT False")
                     sanitized_city = [str(v).replace("'", "''") for v in selected_city]
                     val_str = "(" + ", ".join(f"'{v}'" for v in sanitized_city) + ")"
                     asset_geography_filters.append(f"city_name IN {val_str}")
@@ -253,8 +253,6 @@ def show_abatement_curve():
         total_geography_filters_clause = " AND ".join(total_geography_filters) if total_geography_filters else "1=1"
         asset_geography_filters_clause = " AND ".join(asset_geography_filters) if asset_geography_filters else "1=1"
         asset_geography_filters_clause = asset_geography_filters_clause.replace("iso3_country", "ae.iso3_country")
-        print(total_geography_filters_clause)
-        print(asset_geography_filters_clause)
 
     ##### DROPDOWN MENU: SECTOR, SUBSECTOR, PROGRAM -------
     # add drop-down options for filtering data + program view for x/y axis

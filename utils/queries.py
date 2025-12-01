@@ -1057,8 +1057,6 @@ def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_
 
     return query_table_assets_sql
 
-
-
 def create_heatmap_sql(country_selected_bool,
                        state_selected_bool,
                        g20_bool,
@@ -1066,8 +1064,7 @@ def create_heatmap_sql(country_selected_bool,
                        selected_state_province,
                        annual_asset_path,
                        gadm_1_path=None,
-                       gadm_2_path=None,
-                       selected_metric='reductions'):
+                       gadm_2_path=None):
     
     # agriculture
     # buildings
@@ -1154,27 +1151,21 @@ def create_heatmap_sql(country_selected_bool,
         table_join = ""
         field = "country_name "
 
-    if selected_metric == 'reductions':
-        metric = 'total_emissions_reduced_per_year'
-        metric_total = 'total_reduction_potential'
-    else:
-        metric = 'emissions_quantity'
-        metric_total = 'total_emissions'
 
     sector_summary = f'''
         select cast('Total' as string) as Region
-            , sum(case when a.sector = 'agriculture' then a.{metric} else 0 end) as agriculture
-            , sum(case when a.sector = 'buildings' then a.{metric} else 0 end) as buildings
-            , sum(case when a.sector = 'fluorinated-gases' then a.{metric} else 0 end) as fluorinated_gases
-            , sum(case when a.sector = 'fossil-fuel-operations' then a.{metric} else 0 end) as fossil_fuel_operations
-            , sum(case when a.sector = 'manufacturing' then a.{metric} else 0 end) as manufacturing
-            , sum(case when a.sector = 'mineral-extraction' then a.{metric} else 0 end) as mineral_extraction
-            , sum(case when a.sector = 'power' then a.{metric} else 0 end) as power
-            , sum(case when a.sector = 'transportation' then a.{metric} else 0 end) as transportation
-            , sum(case when a.sector = 'waste' then a.{metric} else 0 end) as waste
-            , sum(case when a.sector <> 'forestry-and-land-use' then a.{metric} else 0 end) as total_exc_forestry
-            , sum(case when a.sector = 'forestry-and-land-use' then a.{metric} else 0 end) forestry_and_land_use
-            , sum(a.{metric}) {metric_total}
+            , sum(case when a.sector = 'agriculture' then a.total_emissions_reduced_per_year else 0 end) as agriculture
+            , sum(case when a.sector = 'buildings' then a.total_emissions_reduced_per_year else 0 end) as buildings
+            , sum(case when a.sector = 'fluorinated-gases' then a.total_emissions_reduced_per_year else 0 end) as fluorinated_gases
+            , sum(case when a.sector = 'fossil-fuel-operations' then a.total_emissions_reduced_per_year else 0 end) as fossil_fuel_operations
+            , sum(case when a.sector = 'manufacturing' then a.total_emissions_reduced_per_year else 0 end) as manufacturing
+            , sum(case when a.sector = 'mineral-extraction' then a.total_emissions_reduced_per_year else 0 end) as mineral_extraction
+            , sum(case when a.sector = 'power' then a.total_emissions_reduced_per_year else 0 end) as power
+            , sum(case when a.sector = 'transportation' then a.total_emissions_reduced_per_year else 0 end) as transportation
+            , sum(case when a.sector = 'waste' then a.total_emissions_reduced_per_year else 0 end) as waste
+            , sum(case when a.sector <> 'forestry-and-land-use' then a.total_emissions_reduced_per_year else 0 end) as total_exc_forestry
+            , sum(case when a.sector = 'forestry-and-land-use' then a.total_emissions_reduced_per_year else 0 end) forestry_and_land_use
+            , sum(a.total_emissions_reduced_per_year) total_reduction_potential
             , count(distinct a.asset_id) asset_count
 
         from (
@@ -1182,7 +1173,7 @@ def create_heatmap_sql(country_selected_bool,
                 , a.gadm_1
                 , a.gadm_2
                 , a.sector
-                , a.{metric}
+                , a.total_emissions_reduced_per_year
                 , a.most_granular
             
             from '{annual_asset_path}' a
@@ -1195,18 +1186,18 @@ def create_heatmap_sql(country_selected_bool,
 
     table_summary = f'''
         select {field} as Region
-            , sum(case when sector = 'agriculture' then {metric} else 0 end) as agriculture
-            , sum(case when sector = 'buildings' then {metric} else 0 end) as buildings
-            , sum(case when sector = 'fluorinated-gases' then {metric} else 0 end) as fluorinated_gases
-            , sum(case when sector = 'fossil-fuel-operations' then {metric} else 0 end) as fossil_fuel_operations
-            , sum(case when sector = 'manufacturing' then {metric} else 0 end) as manufacturing
-            , sum(case when sector = 'mineral-extraction' then {metric} else 0 end) as mineral_extraction
-            , sum(case when sector = 'power' then {metric} else 0 end) as power
-            , sum(case when sector = 'transportation' then {metric} else 0 end) as transportation
-            , sum(case when sector = 'waste' then {metric} else 0 end) as waste
-            , sum(case when sector <> 'forestry-and-land-use' then {metric} else 0 end) as total_exc_forestry
-            , sum(case when sector = 'forestry-and-land-use' then {metric} else 0 end) forestry_and_land_use
-            , sum({metric}) {metric_total}
+            , sum(case when sector = 'agriculture' then total_emissions_reduced_per_year else 0 end) as agriculture
+            , sum(case when sector = 'buildings' then total_emissions_reduced_per_year else 0 end) as buildings
+            , sum(case when sector = 'fluorinated-gases' then total_emissions_reduced_per_year else 0 end) as fluorinated_gases
+            , sum(case when sector = 'fossil-fuel-operations' then total_emissions_reduced_per_year else 0 end) as fossil_fuel_operations
+            , sum(case when sector = 'manufacturing' then total_emissions_reduced_per_year else 0 end) as manufacturing
+            , sum(case when sector = 'mineral-extraction' then total_emissions_reduced_per_year else 0 end) as mineral_extraction
+            , sum(case when sector = 'power' then total_emissions_reduced_per_year else 0 end) as power
+            , sum(case when sector = 'transportation' then total_emissions_reduced_per_year else 0 end) as transportation
+            , sum(case when sector = 'waste' then total_emissions_reduced_per_year else 0 end) as waste
+            , sum(case when sector <> 'forestry-and-land-use' then total_emissions_reduced_per_year else 0 end) as total_exc_forestry
+            , sum(case when sector = 'forestry-and-land-use' then total_emissions_reduced_per_year else 0 end) forestry_and_land_use
+            , sum(total_emissions_reduced_per_year) total_reduction_potential
             , count(distinct asset_id) asset_count
 
         from (
@@ -1216,7 +1207,7 @@ def create_heatmap_sql(country_selected_bool,
                 , g20
                 , sector
                 , country_name
-                , {metric}
+                , total_emissions_reduced_per_year
             
             from '{annual_asset_path}'
 
@@ -1227,7 +1218,7 @@ def create_heatmap_sql(country_selected_bool,
 
         group by {field}
 
-        order by {metric_total} desc
+        order by total_reduction_potential desc
         '''
 
     heatmap_sql = {
@@ -1236,6 +1227,185 @@ def create_heatmap_sql(country_selected_bool,
     }
 
     return heatmap_sql
+
+
+# def create_heatmap_sql(country_selected_bool,
+#                        state_selected_bool,
+#                        g20_bool,
+#                        region_condition,
+#                        selected_state_province,
+#                        annual_asset_path,
+#                        gadm_1_path=None,
+#                        gadm_2_path=None,
+#                        selected_metric='reductions'):
+    
+#     # agriculture
+#     # buildings
+#     # fluorinated-gases
+#     # fossil-fuel-operations
+#     # manufacturing
+#     # mineral-extraction
+#     # power
+#     # transportation
+#     # waste
+#     # forestry-and-land-use
+
+#     if state_selected_bool:
+#         iso3_country = region_condition['column_value']
+
+#         sector_total_join = f'''
+#             INNER JOIN (
+#                 SELECT distinct gadm_2_id gadm_id
+
+#                 FROM '{gadm_2_path}'
+
+#                 where iso3_country = '{iso3_country}'
+#                     and gadm_1_corrected_name = '{selected_state_province}'
+#             ) gadm_2
+#                 on a.gadm_2 = gadm_2.gadm_id
+#         '''
+
+#         table_join = f'''
+#             INNER JOIN (
+#                 SELECT distinct gadm_2_id gadm_id
+#                     , gadm_2_corrected_name gadm_2_name
+
+#                 FROM '{gadm_2_path}'
+
+#                 where iso3_country = '{iso3_country}'
+#                     and gadm_1_corrected_name = '{selected_state_province}'
+#             ) gadm_2
+#                 on a.gadm_2 = gadm_2.gadm_id
+#         '''
+
+#         field = 'gadm_2.gadm_2_name '
+    
+#     elif country_selected_bool:
+#         iso3_country = region_condition['column_value']
+
+#         sector_total_join = f'''
+#             INNER JOIN (
+#                 SELECT distinct gadm_id
+
+#                 FROM '{gadm_1_path}'
+
+#                 where iso3_country = '{iso3_country}'
+#             ) gadm_1
+#                 on a.gadm_1 = gadm_1.gadm_id
+#         '''
+
+#         table_join = f'''
+#             INNER JOIN (
+#                 SELECT distinct gadm_id
+#                     , gadm_1_corrected_name gadm_1_name
+
+#                 FROM '{gadm_1_path}'
+
+#                 where iso3_country = '{iso3_country}'
+#             ) gadm_1
+#                 on a.gadm_1 = gadm_1.gadm_id
+#         '''
+
+#         field = 'gadm_1.gadm_1_name '
+
+#     elif g20_bool:
+#         sector_total_join = f'''
+#             WHERE a.g20 = true
+#         '''
+
+#         table_join = f'''
+#             WHERE a.g20 = true
+#         '''
+
+#         field = "country_name "
+    
+#     else:
+#         sector_total_join = ""
+#         table_join = ""
+#         field = "country_name "
+
+#     if selected_metric == 'reductions':
+#         metric = 'total_emissions_reduced_per_year'
+#         metric_total = 'total_reduction_potential'
+#     else:
+#         metric = 'emissions_quantity'
+#         metric_total = 'total_emissions'
+
+#     sector_summary = f'''
+#         select cast('Total' as string) as Region
+#             , sum(case when a.sector = 'agriculture' then a.{metric} else 0 end) as agriculture
+#             , sum(case when a.sector = 'buildings' then a.{metric} else 0 end) as buildings
+#             , sum(case when a.sector = 'fluorinated-gases' then a.{metric} else 0 end) as fluorinated_gases
+#             , sum(case when a.sector = 'fossil-fuel-operations' then a.{metric} else 0 end) as fossil_fuel_operations
+#             , sum(case when a.sector = 'manufacturing' then a.{metric} else 0 end) as manufacturing
+#             , sum(case when a.sector = 'mineral-extraction' then a.{metric} else 0 end) as mineral_extraction
+#             , sum(case when a.sector = 'power' then a.{metric} else 0 end) as power
+#             , sum(case when a.sector = 'transportation' then a.{metric} else 0 end) as transportation
+#             , sum(case when a.sector = 'waste' then a.{metric} else 0 end) as waste
+#             , sum(case when a.sector <> 'forestry-and-land-use' then a.{metric} else 0 end) as total_exc_forestry
+#             , sum(case when a.sector = 'forestry-and-land-use' then a.{metric} else 0 end) forestry_and_land_use
+#             , sum(a.{metric}) {metric_total}
+#             , count(distinct a.asset_id) asset_count
+
+#         from (
+#             select distinct a.asset_id
+#                 , a.gadm_1
+#                 , a.gadm_2
+#                 , a.sector
+#                 , a.{metric}
+#                 , a.most_granular
+            
+#             from '{annual_asset_path}' a
+#             {sector_total_join}
+#         ) a
+
+#         where most_granular is true
+        
+#     '''
+
+#     table_summary = f'''
+#         select {field} as Region
+#             , sum(case when sector = 'agriculture' then {metric} else 0 end) as agriculture
+#             , sum(case when sector = 'buildings' then {metric} else 0 end) as buildings
+#             , sum(case when sector = 'fluorinated-gases' then {metric} else 0 end) as fluorinated_gases
+#             , sum(case when sector = 'fossil-fuel-operations' then {metric} else 0 end) as fossil_fuel_operations
+#             , sum(case when sector = 'manufacturing' then {metric} else 0 end) as manufacturing
+#             , sum(case when sector = 'mineral-extraction' then {metric} else 0 end) as mineral_extraction
+#             , sum(case when sector = 'power' then {metric} else 0 end) as power
+#             , sum(case when sector = 'transportation' then {metric} else 0 end) as transportation
+#             , sum(case when sector = 'waste' then {metric} else 0 end) as waste
+#             , sum(case when sector <> 'forestry-and-land-use' then {metric} else 0 end) as total_exc_forestry
+#             , sum(case when sector = 'forestry-and-land-use' then {metric} else 0 end) forestry_and_land_use
+#             , sum({metric}) {metric_total}
+#             , count(distinct asset_id) asset_count
+
+#         from (
+#             select distinct asset_id
+#                 , gadm_1
+#                 , gadm_2
+#                 , g20
+#                 , sector
+#                 , country_name
+#                 , {metric}
+            
+#             from '{annual_asset_path}'
+
+#             where most_granular is true
+#         ) a
+
+#         {table_join}
+
+#         group by {field}
+
+#         order by {metric_total} desc
+#         '''
+
+#     heatmap_sql = {
+#         "sector_summary": sector_summary,
+#         "table_summary": table_summary
+#     }
+
+#     return heatmap_sql
 
 '''
 This is ad-hoc for Ting to download subsector reductions by country by given percentile
