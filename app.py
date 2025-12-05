@@ -5,6 +5,11 @@ st.set_page_config(layout="wide")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# Tag added to avoid search engines
+st.markdown("""
+<meta name="robots" content="noindex,nofollow">
+""", unsafe_allow_html=True)
+
 # --- Style cleanup ---
 st.markdown(
     """
