@@ -1106,7 +1106,7 @@ def show_emissions_reduction_plan():
     # print(asset_table_df)
 
     # TEMPORARY FIX FOR CITY REMAINDERS
-    asset_table_df = asset_table_df[asset_table_df['asset_name'].notna()].reset_index()
+    # asset_table_df = asset_table_df[asset_table_df['asset_name'].notna()].reset_index()
 
     asset_table_df['asset_url'] = asset_table_df.apply(make_asset_url, axis=1)
     asset_table_df['country_url'] = asset_table_df.apply(make_country_url, axis=1)
