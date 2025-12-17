@@ -22,7 +22,6 @@ st.markdown(
     }
     html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
         height: 100vh !important;
-        overflow: hidden !important;
     }
 
     .tool-card {
@@ -117,6 +116,23 @@ with col1:
                 <div class="tool-icon" style="font-size: 6rem;">🌡️</div>
                 <div class="tool-title">Heat Map</div>
                 <div class="tool-desc">Pinpoint geographic hotspots of reduction potential across sectors and regions.</div>
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(
+    """
+        <a href="/Ownership" target="_self" style="text-decoration: none; display: block;">
+            <div class="tool-card"
+                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <div class="tool-icon" style="font-size: 6rem;">🗂️</div>
+                <div class="tool-title">Ownership</div>
+                <div class="tool-desc">Identify owners and evaluate their asset portfolios</div>
             </div>
         </a>
         """,
