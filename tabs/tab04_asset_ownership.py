@@ -3,6 +3,7 @@ import duckdb
 import re
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import Point
 import numpy as np
 import plotly.express as px
 from config import CONFIG
@@ -33,6 +34,8 @@ def show_ownership_module():
     gadm_0_path = CONFIG['gadm_0_path']
     ownership_path = CONFIG['asset_ownership_path']
     
+    sector_color_map, sector_line_map = define_color_lines('sector')
+
     ##### IMPORT DATA -------
     
     # import ownership + emissions data
@@ -61,12 +64,12 @@ def show_ownership_module():
     
     # create keys to search by parent, immediate source, and source operator
     df_ownership['parent'] = np.where(df_ownership['parent_lei'] != '', 
-                                      df_ownership['parent_entity_id'] + ': ' + df_ownership['parent_name'] + ' (' + df_ownership['parent_lei'] + ')',
-                                      df_ownership['parent_entity_id'] + ': ' + df_ownership['parent_name'])
+                                      df_ownership['parent_entity_id'].str.strip() + ': ' + df_ownership['parent_name'].str.strip() + ' (' + df_ownership['parent_lei'].str.strip() + ')',
+                                      df_ownership['parent_entity_id'].str.strip() + ': ' + df_ownership['parent_name'].str.strip())
     df_ownership['parent'] = np.where(df_ownership['parent'] == ': ', 'Unknown parent', df_ownership['parent'])
-    df_ownership['immediate source'] = df_ownership['immediate_source_owner_entity_id'] + ': ' + df_ownership['immediate_source_owner']
+    df_ownership['immediate source'] = df_ownership['immediate_source_owner_entity_id'].str.strip() + ': ' + df_ownership['immediate_source_owner'].str.strip()
     df_ownership['immediate source'] = np.where(df_ownership['immediate source'] == ': ', 'Unknown immediate source', df_ownership['immediate source'])
-    df_ownership['source operator'] = df_ownership['source_operator_id'] + ': ' + df_ownership['source_operator']
+    df_ownership['source operator'] = df_ownership['source_operator_id'].str.strip() + ': ' + df_ownership['source_operator'].str.strip()
     df_ownership['source operator'] = np.where(df_ownership['source operator'] == ': ', 'Unknown source operator', df_ownership['source operator'])
     
     # calculate ownership emissions factors
@@ -75,120 +78,70 @@ def show_ownership_module():
 
     ##### DROPDOWN MENU: KEYS FOR SEARCHING -------
 
-    ownership_list = {'parent': df_ownership['parent'].drop_duplicates().sort_values().tolist(),
-                      'immediate source': df_ownership['immediate source'].drop_duplicates().sort_values().tolist(),
-                      'source operator': df_ownership['source operator'].drop_duplicates().sort_values().tolist()}
+    ownership_list = \
+        pd.concat([df_ownership['parent'], df_ownership['immediate source'], df_ownership['source operator']], ignore_index=True)
+    ownership_list = ownership_list.drop_duplicates().sort_values().tolist()
 
-    # by default, show all assets
-    selected_key_default = 'parent'
+    owner_col, loc_col = st.columns(2)
 
-    key_col = st.columns(1)
-    with key_col[0]:
-        key_options = ownership_list.keys()
-        selected_key_user= st.selectbox(
-            "Select owner type",
-            options=key_options)
-
-    if not selected_key_user:
-        selected_key = selected_key_default
-    else:
-        selected_key = selected_key_user
-
-    owners_options = [
-        owner
-        for owner in ownership_list[selected_key]]
-
-    # select relevant owners
-    selected_owners_default = owners_options
-
-    with st.expander("Select owner"):
+     # select relevant owners
+    with owner_col:
         selected_owners_user = st.multiselect(
             "Owner Entity ID: Owner Name (Owner LEI, if applicable)",
-            options=owners_options,
+            options=ownership_list,
             default=[]
         )
 
+
+    with loc_col:
         # select relevant locations
-        loc_options = df_ownership[df_ownership[selected_key].isin(selected_owners_user)]['iso3_country'].drop_duplicates().sort_values()
+        if not selected_owners_user:
+            loc_options = df_ownership['iso3_country'].drop_duplicates().sort_values()
+        else:
+            loc_options = df_ownership[(df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
+                                       (df_ownership['source operator'].isin(selected_owners_user))]['iso3_country'].drop_duplicates().sort_values()
         selected_location_user = st.multiselect(
             "Locations",
             options=loc_options,
-            default=loc_options
+            default=[]
         )
 
     # filter based on selection
     if not selected_owners_user:
-        selected_owners = selected_owners_default
-        df_selected = df_ownership.sort_values('emissions_quantity', ascending=False).reset_index().copy()
+        if not selected_location_user:
+            df_selected = df_ownership.copy()
+        else:
+            df_selected = df_ownership[(df_ownership['iso3_country'].isin(selected_location_user))].copy()
     else:
-        selected_owners = selected_owners_user
-        df_selected = df_ownership[(df_ownership[selected_key].isin(selected_owners)) & (df_ownership['iso3_country'].isin(selected_location_user))].copy()
-        df_selected = df_selected.sort_values('emissions_quantity', ascending=False).reset_index()
+        if not selected_location_user:
+            df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
+                                    (df_ownership['source operator'].isin(selected_owners_user)))].copy()
+        else:
+            df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
+                                        (df_ownership['source operator'].isin(selected_owners_user))) & (df_ownership['iso3_country'].isin(selected_location_user))].copy()
+    df_selected = df_selected.sort_values('emissions_quantity', ascending=False).reset_index()
     
     ##### SUMMARY INFO -------
     st.markdown("### Ownership Analysis")
     st.markdown(
     f"""
-    <div style="text-align:left; font-size:24px; margin-top:5px;">
-        <b>Emissions (t CO2e):</b> {df_selected.drop_duplicates('asset_id')['emissions_quantity'].sum():,.0f} <br> 
-        <b>Sectors:</b> {df_selected['subsector'].nunique()} <br> 
-        <b>Assets:</b> {df_selected['asset_id'].nunique():,.0f} <br> 
+    <div style="text-align:left; font-size:22px; margin-top:5px;">
+        <b>Total Emissions:</b> {format_emissions(df_selected.drop_duplicates('asset_id')['emissions_quantity'].sum())} <br> 
+        <b>Total Reductions:</b> {format_emissions(df_selected.drop_duplicates('asset_id')['net_reduction_potential'].sum())} <br> 
+        <b>Number of Sectors:</b> {df_selected['subsector'].nunique()} <br> 
+        <b>Number of Assets:</b> {df_selected['asset_id'].nunique():,.0f} <br> 
     </div>
     """,
     unsafe_allow_html=True)
 
-    ##### CREATE ASSET MAP -------
+    st.markdown("""<br><br>""", unsafe_allow_html=True)
 
-    # get country information
-    df_map = df_selected.groupby(['iso3_country']).agg(num_assets=('asset_id', 'size')).reset_index()
-    
-    # get asset information --- REPLACE WITH REAL ASSETS
-    asset_data = {
-        "lat": [37.77, 45.42, 19.43],
-        "lon": [-122.42, -75.69, -99.13],
-        "asset_id": ["San Francisco", "Ottawa", "Mexico City"]}
-    df_assets = pd.DataFrame(asset_data)
-
-    # map countries
-    fig = px.choropleth(df_map,
-                        locations="iso3_country",
-                        hover_name="iso3_country",
-                        hover_data={"num_assets": True, "iso3_country": False},
-                        labels={"num_assets": "Number of Assets"},
-                        color='num_assets',
-                        color_continuous_scale=px.colors.sequential.Teal)
-
-    # map assets
-    fig.add_scattergeo(
-        lat=df_assets["lat"],
-        lon=df_assets["lon"],
-        text=df_assets["asset_id"],
-        mode="markers",
-        marker=dict(size=8, color="#EFA282"),
-        textposition="top center",
-        name="Asset",
-        hovertemplate="<b>%{text}</b>"
-    )
-
-    fig.update_layout(width=1000, height=700)
-    st.plotly_chart(fig, use_container_width=True)
-
-    ##### VISUALIZATIONS -------
-    sector_col, country_col = st.columns(2)
-
-    # create pie chart based off sector breakdown
-    with sector_col:
-        fig_pie = px.pie(
-            df_selected,
-            values='emissions_quantity',
-            names='subsector',
-            title='Sector View<br><i>Emissions in CO2e</i>',
-            color_discrete_sequence=px.colors.qualitative.Prism
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
+    ##### ASSET MAP + COUNTRY CHART -------
+    country_col, map_col = st.columns([0.4, 0.6])
 
     # create bar chart based off country breakdown
     with country_col:
+        st.markdown("#### By Countries")
         bar_data = df_selected.groupby('iso3_country', as_index=False)['emissions_quantity'].sum()
         # add row for sum of all countries
         total_row = pd.DataFrame({"iso3_country": ['Total'], "emissions_quantity": [bar_data['emissions_quantity'].sum()]})
@@ -199,16 +152,75 @@ def show_ownership_module():
             bar_data,
             x='iso3_country',
             y='emissions_quantity',
-            title='Country View<br><i>Emissions in CO2e</i>',
             color='color_group',
             color_discrete_map=color_map,
         )
         st.plotly_chart(fig_bar, use_container_width=True)
+
+    with map_col:
+        st.markdown("#### Asset Map")
+    # get country information
+        df_map = df_selected.groupby(['iso3_country']).agg(num_assets=('asset_id', 'size')).reset_index()
+        
+        # get asset information
+        df_assets = df_selected[['sector', 'subsector', 'asset_id', 'asset_name', 'lat_lon']].copy()
+        df_assets['geometry'] = gpd.GeoSeries.from_wkt(df_assets['lat_lon'])
+        df_assets['lon'] = df_assets['geometry'].apply(lambda p: p.x)
+        df_assets['lat'] = df_assets['geometry'].apply(lambda p: p.y)
+
+        # map countries
+        fig = px.choropleth(df_map,
+                            locations="iso3_country",
+                            hover_name="iso3_country",
+                            hover_data={"num_assets": True, "iso3_country": False},
+                            labels={"num_assets": "Number of Assets"},
+                            color='num_assets',
+                            color_continuous_scale=px.colors.sequential.Greys)
+
+        # map assets
+        fig.add_scattergeo(
+            lat=df_assets['lat'],
+            lon=df_assets['lon'],
+            text=df_assets['asset_name'],
+            mode="markers",
+            marker=dict(size=2, color=df_assets['sector'].map(sector_color_map['sector'])),
+            textposition="top center",
+            hovertemplate="<b>%{text}</b><br>Asset ID: %{customdata[0]}<br>%{customdata[1]}<extra></extra>",
+            customdata=np.stack([df_assets['asset_id'], df_assets['subsector']], axis=-1))
+        st.plotly_chart(fig, use_container_width=True)
+
+
+    ##### VISUALIZATIONS -------
+    sector_col, subsector_col = st.columns([0.4, 0.6])
+
+    # create pie chart based off sector breakdown
+    with sector_col:
+        st.markdown("#### By Sectors")
+        fig_pie = px.pie(
+            df_selected,
+            values='emissions_quantity',
+            names='sector',
+            color='sector',
+            color_discrete_map=sector_color_map['sector']
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # create table based off subsector breakdown
+    with subsector_col:
+        st.markdown("#### By Subsectors")
+        df_subsectors = df_selected.groupby(['sector', 'subsector']).agg(total_emissions=('emissions_quantity', 'sum'),
+                                                                         total_reductions=('net_reduction_potential', 'sum'),
+                                                                         number_of_assets=('asset_id', 'nunique')).reset_index()
+        st.dataframe(
+            df_subsectors,
+            use_container_width=True
+        )
+
     
     ##### DATA TABLE -------
 
     st.markdown("###")
-    st.markdown("### Asset Information")
+    st.markdown("### Top Assets Information")
     # add caveat
     st.markdown(
     """
@@ -219,7 +231,7 @@ def show_ownership_module():
     unsafe_allow_html=True)
 
     # create table
-    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'ef_asset']].drop_duplicates().head(1000)
+    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'net_reduction_potential', 'ef_asset']].drop_duplicates().head(1000)
     df_table = df_table.merge(df_gadm_emissions, how='left', on=['iso3_country', 'subsector']).merge(df_global_emissions, how='left', on=['subsector'])
     st.dataframe(
         df_table,
@@ -227,6 +239,7 @@ def show_ownership_module():
         height=600,
         column_config={"activity": st.column_config.NumberColumn(format="localized"),
                        "emissions_quantity": st.column_config.NumberColumn(format="localized"),
+                       "net_reduction_potential": st.column_config.NumberColumn(format="localized"),
                        "ef_asset": st.column_config.NumberColumn(format="localized"),
                        "ef_country": st.column_config.NumberColumn(format="localized"),
                        "ef_global": st.column_config.NumberColumn(format="localized")}
