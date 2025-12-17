@@ -1063,8 +1063,10 @@ def create_heatmap_sql(country_selected_bool,
                        region_condition,
                        selected_state_province,
                        annual_asset_path,
+                       sum_column,
                        gadm_1_path=None,
-                       gadm_2_path=None):
+                       gadm_2_path=None,
+                       ):
     
     # agriculture
     # buildings
@@ -1151,21 +1153,26 @@ def create_heatmap_sql(country_selected_bool,
         table_join = ""
         field = "country_name "
 
+    if sum_column == "Reduction Potential":
+        alias = 'total_reduction_potential'
+    else:
+        alias = 'total_emissions_quantity'
+
 
     sector_summary = f'''
         select cast('Total' as string) as Region
-            , sum(case when a.sector = 'agriculture' then a.total_emissions_reduced_per_year else 0 end) as agriculture
-            , sum(case when a.sector = 'buildings' then a.total_emissions_reduced_per_year else 0 end) as buildings
-            , sum(case when a.sector = 'fluorinated-gases' then a.total_emissions_reduced_per_year else 0 end) as fluorinated_gases
-            , sum(case when a.sector = 'fossil-fuel-operations' then a.total_emissions_reduced_per_year else 0 end) as fossil_fuel_operations
-            , sum(case when a.sector = 'manufacturing' then a.total_emissions_reduced_per_year else 0 end) as manufacturing
-            , sum(case when a.sector = 'mineral-extraction' then a.total_emissions_reduced_per_year else 0 end) as mineral_extraction
-            , sum(case when a.sector = 'power' then a.total_emissions_reduced_per_year else 0 end) as power
-            , sum(case when a.sector = 'transportation' then a.total_emissions_reduced_per_year else 0 end) as transportation
-            , sum(case when a.sector = 'waste' then a.total_emissions_reduced_per_year else 0 end) as waste
-            , sum(case when a.sector <> 'forestry-and-land-use' then a.total_emissions_reduced_per_year else 0 end) as total_exc_forestry
-            , sum(case when a.sector = 'forestry-and-land-use' then a.total_emissions_reduced_per_year else 0 end) forestry_and_land_use
-            , sum(a.total_emissions_reduced_per_year) total_reduction_potential
+            , sum(case when a.sector = 'agriculture' then a.{sum_column} else 0 end) as agriculture
+            , sum(case when a.sector = 'buildings' then a.{sum_column} else 0 end) as buildings
+            , sum(case when a.sector = 'fluorinated-gases' then a.{sum_column} else 0 end) as fluorinated_gases
+            , sum(case when a.sector = 'fossil-fuel-operations' then a.{sum_column} else 0 end) as fossil_fuel_operations
+            , sum(case when a.sector = 'manufacturing' then a.{sum_column} else 0 end) as manufacturing
+            , sum(case when a.sector = 'mineral-extraction' then a.{sum_column} else 0 end) as mineral_extraction
+            , sum(case when a.sector = 'power' then a.{sum_column} else 0 end) as power
+            , sum(case when a.sector = 'transportation' then a.{sum_column} else 0 end) as transportation
+            , sum(case when a.sector = 'waste' then a.{sum_column} else 0 end) as waste
+            , sum(case when a.sector <> 'forestry-and-land-use' then a.{sum_column} else 0 end) as total_exc_forestry
+            , sum(case when a.sector = 'forestry-and-land-use' then a.{sum_column} else 0 end) forestry_and_land_use
+            , sum(a.{sum_column}) as {alias}
             , count(distinct a.asset_id) asset_count
 
         from (
@@ -1173,7 +1180,7 @@ def create_heatmap_sql(country_selected_bool,
                 , a.gadm_1
                 , a.gadm_2
                 , a.sector
-                , a.total_emissions_reduced_per_year
+                , a.{sum_column}
                 , a.most_granular
             
             from '{annual_asset_path}' a
@@ -1186,18 +1193,18 @@ def create_heatmap_sql(country_selected_bool,
 
     table_summary = f'''
         select {field} as Region
-            , sum(case when sector = 'agriculture' then total_emissions_reduced_per_year else 0 end) as agriculture
-            , sum(case when sector = 'buildings' then total_emissions_reduced_per_year else 0 end) as buildings
-            , sum(case when sector = 'fluorinated-gases' then total_emissions_reduced_per_year else 0 end) as fluorinated_gases
-            , sum(case when sector = 'fossil-fuel-operations' then total_emissions_reduced_per_year else 0 end) as fossil_fuel_operations
-            , sum(case when sector = 'manufacturing' then total_emissions_reduced_per_year else 0 end) as manufacturing
-            , sum(case when sector = 'mineral-extraction' then total_emissions_reduced_per_year else 0 end) as mineral_extraction
-            , sum(case when sector = 'power' then total_emissions_reduced_per_year else 0 end) as power
-            , sum(case when sector = 'transportation' then total_emissions_reduced_per_year else 0 end) as transportation
-            , sum(case when sector = 'waste' then total_emissions_reduced_per_year else 0 end) as waste
-            , sum(case when sector <> 'forestry-and-land-use' then total_emissions_reduced_per_year else 0 end) as total_exc_forestry
-            , sum(case when sector = 'forestry-and-land-use' then total_emissions_reduced_per_year else 0 end) forestry_and_land_use
-            , sum(total_emissions_reduced_per_year) total_reduction_potential
+            , sum(case when sector = 'agriculture' then {sum_column} else 0 end) as agriculture
+            , sum(case when sector = 'buildings' then {sum_column} else 0 end) as buildings
+            , sum(case when sector = 'fluorinated-gases' then {sum_column} else 0 end) as fluorinated_gases
+            , sum(case when sector = 'fossil-fuel-operations' then {sum_column} else 0 end) as fossil_fuel_operations
+            , sum(case when sector = 'manufacturing' then {sum_column} else 0 end) as manufacturing
+            , sum(case when sector = 'mineral-extraction' then {sum_column} else 0 end) as mineral_extraction
+            , sum(case when sector = 'power' then {sum_column} else 0 end) as power
+            , sum(case when sector = 'transportation' then {sum_column} else 0 end) as transportation
+            , sum(case when sector = 'waste' then {sum_column} else 0 end) as waste
+            , sum(case when sector <> 'forestry-and-land-use' then {sum_column} else 0 end) as total_exc_forestry
+            , sum(case when sector = 'forestry-and-land-use' then {sum_column} else 0 end) forestry_and_land_use
+            , sum({sum_column}) as {alias}
             , count(distinct asset_id) asset_count
 
         from (
@@ -1207,7 +1214,7 @@ def create_heatmap_sql(country_selected_bool,
                 , g20
                 , sector
                 , country_name
-                , total_emissions_reduced_per_year
+                , {sum_column}
             
             from '{annual_asset_path}'
 
@@ -1218,7 +1225,7 @@ def create_heatmap_sql(country_selected_bool,
 
         group by {field}
 
-        order by total_reduction_potential desc
+        order by {alias} desc
         '''
 
     heatmap_sql = {

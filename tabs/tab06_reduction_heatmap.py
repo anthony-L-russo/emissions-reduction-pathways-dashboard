@@ -62,7 +62,7 @@ def show_reduction_heatmap():
     st.markdown("<br>", unsafe_allow_html=True)
 
 
-    country_dropdown, state_province_dropdown  = st.columns([2,2])
+    country_dropdown, state_province_dropdown, selected_metric_dropdown  = st.columns([2,2,2])
 
     with country_dropdown:
         
@@ -110,6 +110,22 @@ def show_reduction_heatmap():
                 # on_change=reset_city
             )
 
+    with selected_metric_dropdown:
+        selected_metric = st.selectbox(
+                "Select Metric",
+                ["Reduction Potential","Emissions Quantity"],
+                disabled=False,
+                key="metric_selector_HM",
+                # index=0,
+                # on_change=reset_city
+            )
+        
+        if selected_metric == 'Reduction Potential':
+            sum_column = "total_emissions_reduced_per_year"
+            table_header_text = "Reduction Opportunities"
+        else:
+            sum_column = "emissions_quantity"
+            table_header_text = "Emissions"
     
     g20_bool = False
     if selected_region == 'G20':
@@ -118,12 +134,6 @@ def show_reduction_heatmap():
     if selected_state_province not in ['-- Select State / Province --', 'Select a Country to Enable']:
         state_selected_bool = True
         
-    # selected_metric = st.radio(
-    #     "Select metric",
-    #     ['reductions', 'emissions_quantity'],
-    #     horizontal=True,
-    #     key="selection_metric_HM"
-    # )
 
     # heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
     #                                  state_selected_bool=state_selected_bool,
@@ -142,7 +152,8 @@ def show_reduction_heatmap():
                                     selected_state_province=selected_state_province,
                                     annual_asset_path=annual_asset_path,
                                     gadm_1_path=gadm_1_path,
-                                    gadm_2_path=gadm_2_path)
+                                    gadm_2_path=gadm_2_path,
+                                    sum_column=sum_column)
     
     # print(heatmap_sql['sector_summary'])
     
@@ -329,7 +340,7 @@ def show_reduction_heatmap():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("### **Regional Reduction Opportunities by Sector**")
+    st.markdown(f"### **Regional {table_header_text} by Sector**")
 
     # --- Display first table ---
     st.dataframe(
