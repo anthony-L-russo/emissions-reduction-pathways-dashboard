@@ -87,7 +87,7 @@ def show_ownership_module():
      # select relevant owners
     with owner_col:
         selected_owners_user = st.multiselect(
-            "Owner Entity ID: Owner Name (Owner LEI, if applicable)",
+            "Select Owners (by Entity ID, Name, or LEI)",
             options=ownership_list,
             default=[]
         )
@@ -101,7 +101,7 @@ def show_ownership_module():
             loc_options = df_ownership[(df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
                                        (df_ownership['source operator'].isin(selected_owners_user))]['iso3_country'].drop_duplicates().sort_values()
         selected_location_user = st.multiselect(
-            "Locations",
+            "Select Locations",
             options=loc_options,
             default=[]
         )
@@ -175,7 +175,9 @@ def show_ownership_module():
                             hover_data={"num_assets": True, "iso3_country": False},
                             labels={"num_assets": "Number of Assets"},
                             color='num_assets',
-                            color_continuous_scale=px.colors.sequential.Greys)
+                            color_continuous_scale=px.colors.sequential.Teal)
+        
+        fig.update_layout(geo=dict(bgcolor='rgba(240, 240, 240, 1)'))
 
         # map assets
         fig.add_scattergeo(
@@ -183,7 +185,7 @@ def show_ownership_module():
             lon=df_assets['lon'],
             text=df_assets['asset_name'],
             mode="markers",
-            marker=dict(size=2, color=df_assets['sector'].map(sector_color_map['sector'])),
+            marker=dict(size=4, color=df_assets['sector'].map(sector_color_map['sector']), opacity=0.7),
             textposition="top center",
             hovertemplate="<b>%{text}</b><br>Asset ID: %{customdata[0]}<br>%{customdata[1]}<extra></extra>",
             customdata=np.stack([df_assets['asset_id'], df_assets['subsector']], axis=-1))
