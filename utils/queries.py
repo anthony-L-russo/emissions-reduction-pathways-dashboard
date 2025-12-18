@@ -1590,7 +1590,8 @@ def get_ownership_sql(annual_asset_path, ownership_path):
         ao.overall_share_percent,
         SUM(ae.emissions_quantity) AS emissions_quantity,
         SUM(ae.activity) AS activity,
-        ae.activity_units
+        ae.activity_units,
+        coalesce(total_emissions_reduced_per_year,0) AS net_reduction_potential
     FROM '{ownership_path}' ao
     LEFT JOIN '{annual_asset_path}' ae
         ON ao.asset_id = ae.asset_id
@@ -1618,7 +1619,8 @@ def get_ownership_sql(annual_asset_path, ownership_path):
         ao.source_operator,
         ao.source_operator_id,
         ao.overall_share_percent,
-        ae.activity_units
+        ae.activity_units,
+        coalesce(total_emissions_reduced_per_year,0)
     ORDER BY
         ae.sector,
         ae.subsector,
