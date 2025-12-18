@@ -167,16 +167,17 @@ def show_ownership_module():
                                             (df_ownership['subsector'].isin(selected_subsector_user))].copy()
                 
     df_selected = df_selected.sort_values('emissions_quantity', ascending=False).reset_index()
+    df_selected = df_selected.drop_duplicates('asset_id')
     
     ##### SUMMARY INFO -------
     emissions_box, reductions_box, sectors_box, asset_box = st.columns(4)
     st.markdown("""<br>""", unsafe_allow_html=True)
 
     with emissions_box:
-        bordered_metric("Total Emissions", format_emissions(df_selected.drop_duplicates('asset_id')['emissions_quantity'].sum()))
+        bordered_metric("Total Emissions", format_emissions(df_selected['emissions_quantity'].sum()))
 
     with reductions_box:
-        bordered_metric("Total Reductions", format_emissions(df_selected.drop_duplicates('asset_id')['net_reduction_potential'].sum()), value_color='#6AAD89')
+        bordered_metric("Total Reductions", format_emissions(df_selected['net_reduction_potential'].sum()), value_color='#6AAD89')
 
     with sectors_box:
         bordered_metric("Number of Sectors", df_selected['subsector'].nunique())
@@ -192,7 +193,9 @@ def show_ownership_module():
     # create bar chart based off country breakdown
     with country_chart:
         st.markdown("#### By Countries")
-        bar_data = df_selected.groupby('iso3_country', as_index=False)[['net_reduction_potential', 'emissions_quantity']].sum().sort_values('emissions_quantity', ascending=False)
+        bar_data = df_selected.groupby('iso3_country', as_index=False)[['net_reduction_potential', 'emissions_quantity']].sum().sort_values('emissions_quantity', ascending=False).copy()
+        country_totals = bar_data.groupby('iso3_country')['emissions_quantity'].sum().sort_values(ascending=False)
+        sorted_countries = country_totals.index.tolist()
         bar_data['remaining_emissions'] = bar_data['emissions_quantity'] - bar_data['net_reduction_potential']
         bar_data = bar_data.melt(id_vars='iso3_country', value_vars=['remaining_emissions', 'net_reduction_potential'], var_name='emissions_breakdown', value_name='emissions')
         
@@ -205,15 +208,16 @@ def show_ownership_module():
             color_discrete_map={'net_reduction_potential': '#6AAD89', 'remaining_emissions': '#707070'},
             barmode='stack'
         )
+
         fig_bar.update_layout(
             xaxis=dict(
-                rangeslider=dict(
-                    visible=True),
+                rangeslider=dict(visible=True),
                 type="category"
             )
         )
-        fig_bar.update_xaxes(type="category", range=[-0.5,5])
-        #fig_bar.update_traces(marker_color='#008080')
+
+        top10_range = [sorted_countries.index(sorted_countries[0]) - 0.5, sorted_countries.index(sorted_countries[9]) + 0.5]
+        fig_bar.update_xaxes(range=top10_range, type="category")
 
 
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -221,7 +225,7 @@ def show_ownership_module():
     with map_chart:
         st.markdown("#### Asset Map")
         # get country information
-        df_map = df_selected.groupby(['iso3_country']).agg(num_assets=('asset_id', 'size')).reset_index()
+        df_map = df_selected.groupby(['iso3_country']).agg(num_assets=('asset_id', 'nunique')).reset_index().copy()
         
         # get asset information
         df_assets = df_selected[['sector', 'subsector', 'asset_id', 'asset_name', 'lat_lon']].copy()
