@@ -132,7 +132,7 @@ with col1:
                 style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <div class="tool-icon" style="font-size: 6rem;">🗂️</div>
                 <div class="tool-title">Ownership</div>
-                <div class="tool-desc">Identify owners and evaluate their asset portfolios</div>
+                <div class="tool-desc">Identify owners and evaluate their asset portfolios.</div>
             </div>
         </a>
         """,
