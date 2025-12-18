@@ -176,7 +176,7 @@ def show_ownership_module():
         bordered_metric("Total Emissions", format_emissions(df_selected.drop_duplicates('asset_id')['emissions_quantity'].sum()))
 
     with reductions_box:
-        bordered_metric("Total Reductions", format_emissions(df_selected.drop_duplicates('asset_id')['net_reduction_potential'].sum()))
+        bordered_metric("Total Reductions", format_emissions(df_selected.drop_duplicates('asset_id')['net_reduction_potential'].sum()), value_color='#6AAD89')
 
     with sectors_box:
         bordered_metric("Number of Sectors", df_selected['subsector'].nunique())
