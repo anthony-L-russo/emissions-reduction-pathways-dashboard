@@ -209,15 +209,24 @@ def show_reduction_heatmap():
     #     ]
     # )
 
-    universal_red_cmap = LinearSegmentedColormap.from_list(
-        "universal_orange",
-        [
-            (0.00, "#FFFFFF"),   # white
-            (0.50, "#F9A66C"),   # medium orange
-            (1.00, "#E07B3D"),   # **softer terracotta orange**
-        ]
-    )
-
+    if selected_metric != 'Reduction Potential':
+        universal_red_cmap = LinearSegmentedColormap.from_list(
+            "universal_orange",
+            [
+                (0.00, "#FFFFFF"),   # white
+                (0.50, "#F9A66C"),   # medium orange
+                (1.00, "#E07B3D"),   # **softer terracotta orange**
+            ]
+        )
+    else:
+        universal_red_cmap = LinearSegmentedColormap.from_list(
+            "universal_green",
+            [
+                (0.00, "#FFFFFF"),   # white
+                (0.50, "#B7E1A1"),   # soft sage green
+                (1.00, "#4F8A4F"),   # muted forest green (not neon)
+            ]
+        )
 
     def mixed_gradient(df, color_cols, dark_mode=False, low_thresh=0.05):
         colors = pd.DataFrame("", index=df.index, columns=df.columns)
