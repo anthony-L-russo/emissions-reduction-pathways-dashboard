@@ -216,8 +216,12 @@ def show_ownership_module():
             )
         )
 
-        top10_range = [sorted_countries.index(sorted_countries[0]) - 0.5, sorted_countries.index(sorted_countries[9]) + 0.5]
-        fig_bar.update_xaxes(range=top10_range, type="category")
+        if len(bar_data) > 10:
+            top10_range = [
+                sorted_countries.index(sorted_countries[0]) - 0.5,
+                sorted_countries.index(sorted_countries[9]) + 0.5,
+            ]
+            fig_bar.update_xaxes(range=top10_range, type="category")
 
 
         st.plotly_chart(fig_bar, use_container_width=True)
