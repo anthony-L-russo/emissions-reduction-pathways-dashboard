@@ -337,7 +337,7 @@ def show_ownership_module():
     unsafe_allow_html=True)
 
     # create table
-    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'parent_name', 'immediate_source_owner', 'source_operator', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'net_reduction_potential', 'ef_asset']].drop_duplicates().head(500)
+    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'parent_name', 'overall_share_percent', 'immediate_source_owner', 'source_operator', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'net_reduction_potential', 'ef_asset']].drop_duplicates().head(500)
     df_table = df_table.merge(df_gadm_emissions, how='left', on=['iso3_country', 'subsector']).merge(df_global_emissions, how='left', on=['subsector'])
 
     numeric_cols = df_table.select_dtypes(include="number").columns
