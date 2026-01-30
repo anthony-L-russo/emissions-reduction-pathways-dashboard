@@ -55,129 +55,185 @@ def show_ownership_module():
     df_gadm_emissions = df_gadm_emissions[['iso3_country', 'subsector', 'ef_country']]
 
     # format + clean ownership data
-    df_ownership['parent_entity_id'] = df_ownership['parent_entity_id'].fillna('')
+    df_ownership['parent_entity_id'] = df_ownership['parent_entity_id'].str.strip().fillna('')
     df_ownership['parent_name'] = df_ownership['parent_name'].str.strip()
-    df_ownership['parent_name'] = df_ownership['parent_name'].replace('unknown', '').fillna('')
+    df_ownership['parent_name'] = df_ownership['parent_name'].replace('unknown', 'Unknown').fillna('Unknown')
+    df_ownership['parent_lei'] = df_ownership['parent_lei'].str.strip()
     df_ownership['parent_lei'] = np.where(((df_ownership['parent_lei'] == 'not applicable') & (df_ownership['parent_entity_type'] == 'unknown entity')) |
                                         (df_ownership['parent_lei'] == 'not found'), '', df_ownership['parent_lei'])
-    df_ownership['immediate_source_owner'] = df_ownership['immediate_source_owner'].replace('unknown', '').fillna('')
+    df_ownership['immediate_source_owner'] = df_ownership['immediate_source_owner'].str.strip().replace('unknown', 'Unknown').fillna('Unknown')
+    df_ownership['immediate_source_owner_entity_id'] = df_ownership['immediate_source_owner_entity_id'].str.strip()
+    df_ownership['source_operator'] = df_ownership['source_operator'].replace('unknown', 'Unknown').fillna('Unknown')
+    df_ownership['source_operator_id'] = df_ownership['source_operator_id'].str.strip()
     
     # create keys to search by parent, immediate source, and source operator
     df_entity_id = df_ownership.copy()
-    df_entity_id['parent'] = np.where(df_entity_id['parent_lei'] != '', 
-                                      df_entity_id['parent_entity_id'].str.strip() + ': ' + df_entity_id['parent_name'].str.strip() + ' (' + df_entity_id['parent_lei'].str.strip() + ')',
-                                      df_entity_id['parent_entity_id'].str.strip() + ': ' + df_entity_id['parent_name'].str.strip())
-    df_entity_id['immediate source'] = df_entity_id['immediate_source_owner_entity_id'].str.strip() + ': ' + df_entity_id['immediate_source_owner'].str.strip()
-    df_entity_id['source operator'] = df_entity_id['source_operator_id'].str.strip() + ': ' + df_entity_id['source_operator'].str.strip()
 
-    df_entity_id = pd.concat([df_entity_id[['parent_entity_id', 'parent']].rename(columns={'parent_entity_id': 'entity_id', 'parent': 'entity_key'}),
-                              df_entity_id[['immediate_source_owner_entity_id', 'immediate source']].rename(columns={'immediate_source_owner_entity_id': 'entity_id', 'immedate source': 'entity_key'}),
-                              df_entity_id[['source_operator_id', 'source operator']].rename(columns={'source_operator_id': 'entity_id', 'source operator': 'entity_key'})])
+    df_entity_id = pd.concat([df_entity_id[['parent_entity_id', 'parent_name']].rename(columns={'parent_entity_id': 'entity_id', 'parent_name': 'entity_key'}),
+                              df_entity_id[['immediate_source_owner_entity_id', 'immediate_source_owner']].rename(columns={'immediate_source_owner_entity_id': 'entity_id', 'immediate_source_owner': 'entity_key'}),
+                              df_entity_id[['source_operator_id', 'source_operator']].rename(columns={'source_operator_id': 'entity_id', 'source_operator': 'entity_key'})])
     
     df_entity_id['entity_key'] = df_entity_id['entity_key'].fillna('Unknown').astype(str)
-    df_entity_id['key_len'] = df_entity_id['entity_key'].apply(len)
-    df_entity_id = df_entity_id.sort_values(['entity_id', 'key_len'], ascending=[True, False]).drop_duplicates(subset='entity_id', keep='first').drop(columns=['key_len'])
+    df_entity_id = df_entity_id.sort_values('entity_id').drop_duplicates(subset='entity_id', keep='first')
     df_entity_id['entity_key'] = np.where(df_entity_id['entity_id'] == '', 'Unknown', df_entity_id['entity_key'])
+    df_entity_id = df_entity_id.merge(df_ownership[['parent_entity_id', 'parent_lei']].rename(columns={'parent_entity_id': 'entity_id', 'parent_lei': 'lei'}), how='left', on='entity_id')
+    df_entity_id['entity_name'] = np.where(df_entity_id['lei'].isna(), df_entity_id['entity_id'] + ': ' + df_entity_id['entity_key'],
+                                           df_entity_id['entity_id'] + ': ' + df_entity_id['entity_key'] + ' (' + df_entity_id['lei'] + ')')
+    df_entity_id['entity_key'] = df_entity_id['entity_key'].str.strip()
+    df_entity_id['entity_id'] = df_entity_id['entity_id'].str.strip()
     dict_entity_id = df_entity_id.set_index('entity_id')['entity_key'].to_dict()
 
-    df_ownership['parent'] = df_ownership['parent_entity_id'].map(dict_entity_id)
-    df_ownership['immediate source'] = df_ownership['immediate_source_owner_entity_id'].map(dict_entity_id)
-    df_ownership['source operator'] = df_ownership['source_operator_id'].map(dict_entity_id)
+    df_ownership['parent_name'] = df_ownership['parent_entity_id'].map(dict_entity_id)
+    df_ownership['immediate_source_operator'] = df_ownership['immediate_source_owner_entity_id'].map(dict_entity_id)
+    df_ownership['source_operator'] = df_ownership['source_operator_id'].map(dict_entity_id)
     
     # calculate ownership emissions factors
     df_ownership['activity'] = df_ownership['activity'].astype(float)
+    df_ownership['parent_emissions_quantity'] = np.where(df_ownership['parent_overall_share_pct'].isna(), df_ownership['emissions_quantity'],
+                                                         df_ownership['parent_overall_share_pct'] * df_ownership['emissions_quantity'] / 100)
+    df_ownership['parent_net_reduction_potential'] = np.where(df_ownership['parent_overall_share_pct'].isna(), df_ownership['net_reduction_potential'],
+                                                         df_ownership['parent_overall_share_pct'] * df_ownership['net_reduction_potential'] / 100)
     df_ownership['ef_asset'] = df_ownership['emissions_quantity'].div(df_ownership['activity'].where(df_ownership['activity'] != 0, np.nan))
 
     ##### DROPDOWN MENU: KEYS FOR SEARCHING -------
 
     ownership_list = \
-        pd.concat([df_ownership['parent'], df_ownership['immediate source'], df_ownership['source operator']], ignore_index=True)
+        pd.concat([df_ownership['parent_name'].str.strip(), df_ownership['immediate_source_owner'].str.strip(), df_ownership['source_operator'].str.strip()], ignore_index=True)
     ownership_list = ownership_list.drop_duplicates().sort_values().tolist()
+
+    for key in ['selected_owners', 'selected_locations', 'selected_subsectors']:
+        if key not in st.session_state:
+            st.session_state[key] = []
+
+    def is_owner_match(row, owners):
+        return (row['parent_name'] in owners or 
+                row['immediate_source_owner'] in owners or 
+                row['source_operator'] in owners)
+
+    def update_owner_options():
+        """Callback: regenerate owner options when location/subsector change"""
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_locations:
+            mask &= df_ownership['iso3_country'].isin(st.session_state.selected_locations)
+        if st.session_state.selected_subsectors:
+            mask &= df_ownership['subsector'].isin(st.session_state.selected_subsectors)
+        
+        owner_options = (pd.concat([df_ownership[mask]['parent_name'], 
+                                df_ownership[mask]['immediate_source_owner'], 
+                                df_ownership[mask]['source_operator']], ignore_index=True)
+                        .drop_duplicates().sort_values().tolist())
+        
+        st.session_state.selected_owners = [o for o in st.session_state.selected_owners if o in owner_options]
+
+    def update_location_options():
+        """Callback: regenerate location options when owner/subsector change"""
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_owners:
+            mask &= df_ownership.apply(lambda row: is_owner_match(row, st.session_state.selected_owners), axis=1)
+        if st.session_state.selected_subsectors:
+            mask &= df_ownership['subsector'].isin(st.session_state.selected_subsectors)
+        loc_options = df_ownership[mask]['iso3_country'].drop_duplicates().sort_values().tolist()
+        
+        st.session_state.selected_locations = [l for l in st.session_state.selected_locations if l in loc_options]
+
+    def update_subsector_options():
+        """Callback: regenerate subsector options when owner/location change"""
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_owners:
+            mask &= df_ownership.apply(lambda row: is_owner_match(row, st.session_state.selected_owners), axis=1)
+        if st.session_state.selected_locations:
+            mask &= df_ownership['iso3_country'].isin(st.session_state.selected_locations)
+        subsector_options = df_ownership[mask]['subsector'].drop_duplicates().sort_values().tolist()
+        
+        st.session_state.selected_subsectors = [s for s in st.session_state.selected_subsectors if s in subsector_options]
 
     owner_col, loc_col, subsector_col = st.columns(3)
 
-     # select relevant owners
+    # compute current options 
     with owner_col:
-        selected_owners_user = st.multiselect(
-            "Select Owners (by Entity ID, Name, or LEI)",
-            options=ownership_list,
-            default=[]
-        )
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_locations:
+            mask &= df_ownership['iso3_country'].isin(st.session_state.selected_locations)
+        if st.session_state.selected_subsectors:
+            mask &= df_ownership['subsector'].isin(st.session_state.selected_subsectors)
+        
+        owner_options = (pd.concat([df_ownership[mask]['parent_name'], 
+                                df_ownership[mask]['immediate_source_owner'], 
+                                df_ownership[mask]['source_operator']], ignore_index=True)
+                        .drop_duplicates().sort_values().tolist())
+        
+        st.multiselect("Select Owners", options=owner_options,
+                    default=st.session_state.selected_owners, 
+                    key="owners_multiselect",
+                    on_change=lambda: (st.session_state.update(selected_owners=st.session_state.owners_multiselect), 
+                                    update_location_options(), update_subsector_options()))
 
-    # select relevant locations
     with loc_col:
-        if not selected_owners_user:
-            loc_options = df_ownership['iso3_country'].drop_duplicates().sort_values()
-        else:
-            loc_options = df_ownership[(df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                       (df_ownership['source operator'].isin(selected_owners_user))]['iso3_country'].drop_duplicates().sort_values()
-        selected_location_user = st.multiselect(
-            "Select Locations",
-            options=loc_options,
-            default=[]
-        )
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_owners:
+            mask &= df_ownership.apply(lambda row: is_owner_match(row, st.session_state.selected_owners), axis=1)
+        if st.session_state.selected_subsectors:
+            mask &= df_ownership['subsector'].isin(st.session_state.selected_subsectors)
+        
+        loc_options = df_ownership[mask]['iso3_country'].drop_duplicates().sort_values().tolist()
+        
+        st.multiselect("Select Locations", options=loc_options,
+                    default=st.session_state.selected_locations,
+                    key="locations_multiselect",
+                    on_change=lambda: (st.session_state.update(selected_locations=st.session_state.locations_multiselect), 
+                                    update_owner_options(), update_subsector_options()))
 
-    # select relevant subsectors
     with subsector_col:
-        if not selected_owners_user:
-            if not selected_location_user:
-                subsector_options = df_ownership['subsector'].drop_duplicates().sort_values()
-            else:
-                subsector_options = df_ownership[df_ownership['iso3_country'].isin(selected_location_user)]['subsector'].drop_duplicates().sort_values()
-        else:
-            if not selected_location_user:
-                subsector_options = df_ownership[(df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                                (df_ownership['source operator'].isin(selected_owners_user))]['subsector'].drop_duplicates().sort_values()
-            else:
-                subsector_options = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                                  (df_ownership['source operator'].isin(selected_owners_user))) & (df_ownership['iso3_country'].isin(selected_location_user))]['subsector'].drop_duplicates().sort_values()
-        selected_subsector_user = st.multiselect(
-            "Select Subsector",
-            options=subsector_options,
-            default=[]
-        )
+        mask = pd.Series(True, index=df_ownership.index)
+        if st.session_state.selected_owners:
+            mask &= df_ownership.apply(lambda row: is_owner_match(row, st.session_state.selected_owners), axis=1)
+        if st.session_state.selected_locations:
+            mask &= df_ownership['iso3_country'].isin(st.session_state.selected_locations)
+        
+        subsector_options = df_ownership[mask]['subsector'].drop_duplicates().sort_values().tolist()
+        
+        st.multiselect("Select Subsector", options=subsector_options,
+                    default=st.session_state.selected_subsectors,
+                    key="subsectors_multiselect",
+                    on_change=lambda: (st.session_state.update(selected_subsectors=st.session_state.subsectors_multiselect), 
+                                    update_owner_options(), update_location_options()))
 
-    # filter based on selection
-    if not selected_owners_user:
-        if not selected_location_user:
-            if not selected_subsector_user:
-                df_selected = df_ownership.copy()
-            else:
-                df_selected = df_ownership[(df_ownership['subsector'].isin(selected_subsector_user))].copy()
-        else:
-            if not selected_subsector_user:
-                df_selected = df_ownership[(df_ownership['iso3_country'].isin(selected_location_user))].copy()
-            else:
-                df_selected = df_ownership[(df_ownership['iso3_country'].isin(selected_location_user)) & (df_ownership['subsector'].isin(selected_subsector_user))].copy()
-    else:
-        if not selected_location_user:
-            if not selected_subsector_user:
-                df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                        (df_ownership['source operator'].isin(selected_owners_user)))].copy()
-            else:
-                df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                        (df_ownership['source operator'].isin(selected_owners_user))) & (df_ownership['subsector'].isin(selected_subsector_user))].copy()
-        else:
-            if not selected_subsector_user:
-                df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                            (df_ownership['source operator'].isin(selected_owners_user))) & (df_ownership['iso3_country'].isin(selected_location_user))].copy()
-            else:
-                df_selected = df_ownership[((df_ownership['parent'].isin(selected_owners_user)) | (df_ownership['immediate source'].isin(selected_owners_user)) | 
-                                            (df_ownership['source operator'].isin(selected_owners_user))) & (df_ownership['iso3_country'].isin(selected_location_user)) &
-                                            (df_ownership['subsector'].isin(selected_subsector_user))].copy()
-                
-    df_selected = df_selected.sort_values('emissions_quantity', ascending=False).reset_index()
-    df_selected = df_selected.drop_duplicates('asset_id')
-    
+    # filter assets df based on selection
+    mask = pd.Series(True, index=df_ownership.index)
+    if st.session_state.selected_owners:
+        mask &= df_ownership.apply(lambda row: is_owner_match(row, st.session_state.selected_owners), axis=1)
+    if st.session_state.selected_locations:
+        mask &= df_ownership['iso3_country'].isin(st.session_state.selected_locations)
+    if st.session_state.selected_subsectors:
+        mask &= df_ownership['subsector'].isin(st.session_state.selected_subsectors)
+
+    df_selected = df_ownership[mask].copy()    
+    df_selected = df_selected.sort_values('parent_emissions_quantity', ascending=False).reset_index()
+
+    df_assets = df_selected.groupby('asset_id').agg(parent_emissions_quantity=('parent_emissions_quantity', 'sum'), 
+                                                    emissions_quantity=('emissions_quantity', 'first'),
+                                                    parent_net_reduction_potential=('parent_net_reduction_potential', 'sum'), 
+                                                    net_reduction_potential=('net_reduction_potential', 'first'))
+
+    df_assets['total_emissions'] = np.where(df_assets['parent_emissions_quantity'] > df_assets['emissions_quantity'],
+                                            df_assets['emissions_quantity'], df_assets['parent_emissions_quantity'])
+    df_assets['total_reductions'] = np.where(df_assets['parent_net_reduction_potential'] > df_assets['net_reduction_potential'],
+                                            df_assets['net_reduction_potential'], df_assets['parent_net_reduction_potential'])
+
     ##### SUMMARY INFO -------
+    if st.session_state.selected_owners:
+        owners_info = ', '.join(df_entity_id[df_entity_id['entity_key'].isin(st.session_state.selected_owners)]['entity_name'].unique().tolist())
+        st.markdown(f"*Selected Owners*: {owners_info}")
+    else:
+        st.markdown('*Selected Owners*: All')
     emissions_box, reductions_box, sectors_box, asset_box = st.columns(4)
     st.markdown("""<br>""", unsafe_allow_html=True)
 
     with emissions_box:
-        bordered_metric("Total Emissions", format_emissions(df_selected['emissions_quantity'].sum()))
+        bordered_metric("Total Emissions", format_emissions(df_assets['total_emissions'].sum()))
 
     with reductions_box:
-        bordered_metric("Total Reductions", format_emissions(df_selected['net_reduction_potential'].sum()), value_color='#6AAD89')
+        bordered_metric("Total Reductions", format_emissions(df_assets['total_reductions'].sum()), value_color='#6AAD89')
 
     with sectors_box:
         bordered_metric("Number of Sectors", df_selected['subsector'].nunique())
@@ -188,46 +244,10 @@ def show_ownership_module():
     st.markdown("""<br>""", unsafe_allow_html=True)
 
     ##### ASSET MAP + COUNTRY CHART -------
-    country_chart, map_chart = st.columns([0.4, 0.6])
+    map_chart, country_chart, sector_chart, = st.columns(3)
 
-    # create bar chart based off country breakdown
-    with country_chart:
-        st.markdown("#### By Countries")
-        bar_data = df_selected.groupby('iso3_country', as_index=False)[['net_reduction_potential', 'emissions_quantity']].sum().sort_values('emissions_quantity', ascending=False).copy()
-        country_totals = bar_data.groupby('iso3_country')['emissions_quantity'].sum().sort_values(ascending=False)
-        sorted_countries = country_totals.index.tolist()
-        bar_data['remaining_emissions'] = bar_data['emissions_quantity'] - bar_data['net_reduction_potential']
-        bar_data = bar_data.melt(id_vars='iso3_country', value_vars=['remaining_emissions', 'net_reduction_potential'], var_name='emissions_breakdown', value_name='emissions')
-        
-        fig_bar = px.bar(
-            bar_data,
-            x='iso3_country',
-            y='emissions',
-            title='Emissions by Country (tCO2e)',
-            color='emissions_breakdown',
-            color_discrete_map={'net_reduction_potential': '#6AAD89', 'remaining_emissions': '#707070'},
-            barmode='stack'
-        )
-
-        fig_bar.update_layout(
-            xaxis=dict(
-                rangeslider=dict(visible=True),
-                type="category"
-            )
-        )
-
-        if len(bar_data) > 10:
-            top10_range = [
-                sorted_countries.index(sorted_countries[0]) - 0.5,
-                sorted_countries.index(sorted_countries[9]) + 0.5,
-            ]
-            fig_bar.update_xaxes(range=top10_range, type="category")
-
-
-        st.plotly_chart(fig_bar, use_container_width=True)
-
+    # create map of assets
     with map_chart:
-        st.markdown("#### Asset Map")
         # get country information
         df_map = df_selected.groupby(['iso3_country']).agg(num_assets=('asset_id', 'nunique')).reset_index().copy()
         
@@ -259,19 +279,50 @@ def show_ownership_module():
             textposition="top center",
             hovertemplate="<b>%{text}</b><br>Asset ID: %{customdata[0]}<br>%{customdata[1]}<extra></extra>",
             customdata=np.stack([df_assets['asset_id'], df_assets['subsector']], axis=-1))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
+
+    # create bar chart based off country breakdown
+    with country_chart:
+        bar_data = df_selected.groupby('iso3_country', as_index=False)[['parent_net_reduction_potential', 'parent_emissions_quantity']].sum().sort_values('parent_emissions_quantity', ascending=False).copy()
+        country_totals = bar_data.groupby('iso3_country')['parent_emissions_quantity'].sum().sort_values(ascending=False)
+        sorted_countries = country_totals.index.tolist()
+        bar_data['remaining_emissions'] = bar_data['parent_emissions_quantity'] - bar_data['parent_net_reduction_potential']
+        bar_data = bar_data.melt(id_vars='iso3_country', value_vars=['remaining_emissions', 'parent_net_reduction_potential'], var_name='emissions_breakdown', value_name='parent_emissions')
+        
+        fig_bar = px.bar(
+            bar_data,
+            x='iso3_country',
+            y='parent_emissions',
+            title='Emissions by Country (tCO2e)',
+            color='emissions_breakdown',
+            color_discrete_map={'parent_net_reduction_potential': '#6AAD89', 'remaining_emissions': '#707070'},
+            barmode='stack'
+        )
+
+        fig_bar.update_layout(
+            xaxis=dict(
+                rangeslider=dict(visible=True),
+                type="category"
+            )
+        )
+
+        if len(bar_data) > 10:
+            top10_range = [
+                sorted_countries.index(sorted_countries[0]) - 0.5,
+                sorted_countries.index(sorted_countries[9]) + 0.5,
+            ]
+            fig_bar.update_xaxes(range=top10_range, type="category")
 
 
-    ##### VISUALIZATIONS -------
-    sector_chart, subsector_table = st.columns([0.4, 0.6])
+        st.plotly_chart(fig_bar, use_container_width=True)
+
 
     # create pie chart based off sector breakdown
     with sector_chart:
-        st.markdown("#### By Sectors")
         fig_pie = px.pie(
             df_selected,
             title='Emissions by Sector (%)',
-            values='emissions_quantity',
+            values='parent_emissions_quantity',
             names='sector',
             color='sector',
             color_discrete_map=sector_color_map['sector']
@@ -279,19 +330,18 @@ def show_ownership_module():
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # create table based off subsector breakdown
-    with subsector_table:
-        st.markdown("#### By Subsectors")
-        df_subsectors = df_selected.groupby(['sector', 'subsector']).agg(total_emissions=('emissions_quantity', 'sum'),
-                                                                         total_reductions=('net_reduction_potential', 'sum'),
-                                                                         number_of_assets=('asset_id', 'nunique')).reset_index().sort_values('total_emissions', ascending=False).reset_index(drop=True)
-        
-        numeric_cols = df_subsectors.select_dtypes(include="number").columns
-        df_subsectors = df_subsectors.style.format({col: "{:,.0f}" for col in numeric_cols})
-        
-        st.dataframe(
-            df_subsectors,
-            use_container_width=True
-        )
+    st.markdown("#### Sector Summary")
+    df_subsectors = df_selected.groupby(['sector', 'subsector']).agg(total_emissions=('parent_emissions_quantity', 'sum'),
+                                                                     total_reductions=('parent_net_reduction_potential', 'sum'),
+                                                                     number_of_assets=('asset_id', 'nunique')).reset_index().sort_values('total_emissions', ascending=False).reset_index(drop=True)
+    
+    numeric_cols = df_subsectors.select_dtypes(include="number").columns
+    df_subsectors = df_subsectors.style.format({col: "{:,.0f}" for col in numeric_cols})
+    
+    st.dataframe(
+        df_subsectors,
+        use_container_width=True
+    )
 
     
     ##### DATA TABLE -------
@@ -308,7 +358,7 @@ def show_ownership_module():
     unsafe_allow_html=True)
 
     # create table
-    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'net_reduction_potential', 'ef_asset']].drop_duplicates().head(500)
+    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'parent_name', 'parent_overall_share_pct', 'immediate_source_owner', 'source_operator', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'parent_emissions_quantity', 'net_reduction_potential', 'parent_net_reduction_potential', 'ef_asset']].drop_duplicates().head(500)
     df_table = df_table.merge(df_gadm_emissions, how='left', on=['iso3_country', 'subsector']).merge(df_global_emissions, how='left', on=['subsector'])
 
     numeric_cols = df_table.select_dtypes(include="number").columns
