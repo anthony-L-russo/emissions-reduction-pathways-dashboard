@@ -1209,10 +1209,10 @@ def show_emissions_reduction_plan():
     elif not df_pie.empty or not df_stacked_bar.empty or not asset_table_df.empty:
         # Create dictionary of DataFrames to export
         dfs_for_excel = {
-            "Sector Emissions": df_pie.drop(columns=["emissions_quantity"]),
+            # "Sector Emissions": df_pie.drop(columns=["emissions_quantity"]),
             "Sector Reductions": df_stacked_bar,
-            "Asset Top 100 Reductions": asset_table_df,
-            "Subsector Reductions": country_subsector_ef_download_df
+            "Subsector Reductions": country_subsector_ef_download_df,
+            "Asset Top 100 Reductions": asset_table_df
         }
 
     # Use the utility function to create the Excel file
