@@ -70,12 +70,17 @@ def show_ownership_module():
     df_entity_id = df_ownership.copy()
 
     df_entity_id = pd.concat([df_entity_id[['parent_entity_id', 'parent_name']].rename(columns={'parent_entity_id': 'entity_id', 'parent_name': 'entity_key'}),
-                              df_entity_id[['immediate_source_owner_entity_id', 'immediate_source_owner']].rename(columns={'immediate_source_owner_entity_id': 'entity_id', 'immedate_source_owner': 'entity_key'}),
+                              df_entity_id[['immediate_source_owner_entity_id', 'immediate_source_owner']].rename(columns={'immediate_source_owner_entity_id': 'entity_id', 'immediate_source_owner': 'entity_key'}),
                               df_entity_id[['source_operator_id', 'source_operator']].rename(columns={'source_operator_id': 'entity_id', 'source_operator': 'entity_key'})])
     
     df_entity_id['entity_key'] = df_entity_id['entity_key'].fillna('Unknown').astype(str)
     df_entity_id = df_entity_id.sort_values('entity_id').drop_duplicates(subset='entity_id', keep='first')
     df_entity_id['entity_key'] = np.where(df_entity_id['entity_id'] == '', 'Unknown', df_entity_id['entity_key'])
+    df_entity_id = df_entity_id.merge(df_ownership[['parent_entity_id', 'parent_lei']].rename(columns={'parent_entity_id': 'entity_id', 'parent_lei': 'lei'}), how='left', on='entity_id')
+    df_entity_id['entity_name'] = np.where(df_entity_id['lei'].isna(), df_entity_id['entity_id'] + ': ' + df_entity_id['entity_key'],
+                                           df_entity_id['entity_id'] + ': ' + df_entity_id['entity_key'] + ' (' + df_entity_id['lei'] + ')')
+    df_entity_id['entity_key'] = df_entity_id['entity_key'].str.strip()
+    df_entity_id['entity_id'] = df_entity_id['entity_id'].str.strip()
     dict_entity_id = df_entity_id.set_index('entity_id')['entity_key'].to_dict()
 
     df_ownership['parent_name'] = df_ownership['parent_entity_id'].map(dict_entity_id)
@@ -93,7 +98,7 @@ def show_ownership_module():
     ##### DROPDOWN MENU: KEYS FOR SEARCHING -------
 
     ownership_list = \
-        pd.concat([df_ownership['parent_name'], df_ownership['immediate_source_owner'], df_ownership['source_operator']], ignore_index=True)
+        pd.concat([df_ownership['parent_name'].str.strip(), df_ownership['immediate_source_owner'].str.strip(), df_ownership['source_operator'].str.strip()], ignore_index=True)
     ownership_list = ownership_list.drop_duplicates().sort_values().tolist()
 
     for key in ['selected_owners', 'selected_locations', 'selected_subsectors']:
@@ -204,17 +209,31 @@ def show_ownership_module():
 
     df_selected = df_ownership[mask].copy()    
     df_selected = df_selected.sort_values('parent_emissions_quantity', ascending=False).reset_index()
-    df_selected = df_selected.drop_duplicates('asset_id')
-    
+
+    df_assets = df_selected.groupby('asset_id').agg(parent_emissions_quantity=('parent_emissions_quantity', 'sum'), 
+                                                    emissions_quantity=('emissions_quantity', 'first'),
+                                                    parent_net_reduction_potential=('parent_net_reduction_potential', 'sum'), 
+                                                    net_reduction_potential=('net_reduction_potential', 'first'))
+
+    df_assets['total_emissions'] = np.where(df_assets['parent_emissions_quantity'] > df_assets['emissions_quantity'],
+                                            df_assets['emissions_quantity'], df_assets['parent_emissions_quantity'])
+    df_assets['total_reductions'] = np.where(df_assets['parent_net_reduction_potential'] > df_assets['net_reduction_potential'],
+                                            df_assets['net_reduction_potential'], df_assets['parent_net_reduction_potential'])
+
     ##### SUMMARY INFO -------
+    if st.session_state.selected_owners:
+        owners_info = ', '.join(df_entity_id[df_entity_id['entity_key'].isin(st.session_state.selected_owners)]['entity_name'].unique().tolist())
+        st.markdown(f"*Selected Owners*: {owners_info}")
+    else:
+        st.markdown('*Selected Owners*: All')
     emissions_box, reductions_box, sectors_box, asset_box = st.columns(4)
     st.markdown("""<br>""", unsafe_allow_html=True)
 
     with emissions_box:
-        bordered_metric("Total Emissions", format_emissions(df_selected['parent_emissions_quantity'].sum()))
+        bordered_metric("Total Emissions", format_emissions(df_assets['total_emissions'].sum()))
 
     with reductions_box:
-        bordered_metric("Total Reductions", format_emissions(df_selected['parent_net_reduction_potential'].sum()), value_color='#6AAD89')
+        bordered_metric("Total Reductions", format_emissions(df_assets['total_reductions'].sum()), value_color='#6AAD89')
 
     with sectors_box:
         bordered_metric("Number of Sectors", df_selected['subsector'].nunique())
