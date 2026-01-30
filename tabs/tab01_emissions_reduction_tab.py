@@ -1185,19 +1185,34 @@ def show_emissions_reduction_plan():
 
         subsector_reduction_download_df = con.execute(subsector_download_sql).df()
 
+    else:
+        country_subsector_ef_sql = build_country_subsector_ef_download(
+                                    annual_asset_path,
+                                    gadm_0_path,
+                                    dropdown_join,
+                                    reduction_where_sql,
+                                    region_condition,
+                                    selected_year,
+                                    exclude_forestry
+                                )
+        
+        print(country_subsector_ef_sql)
+        country_subsector_ef_download_df = con.execute(country_subsector_ef_sql).df()
+
     if not use_ct_ers:
         dfs_for_excel = {
             "Sector Emissions": df_pie,
             "Sector Reduction Data": df_stacked_bar,
             "Subsector Reduction Data": subsector_reduction_download_df,
-            "Asset Reduction Data": asset_table_df,
+            "Asset Reduction Data": asset_table_df
         }
     elif not df_pie.empty or not df_stacked_bar.empty or not asset_table_df.empty:
         # Create dictionary of DataFrames to export
         dfs_for_excel = {
-            "Sector Emissions": df_pie,
-            "Sector Reduction Data": df_stacked_bar,
-            "Asset Reduction Data": asset_table_df,
+            # "Sector Emissions": df_pie.drop(columns=["emissions_quantity"]),
+            "Sector Reductions": df_stacked_bar,
+            "Subsector Reductions": country_subsector_ef_download_df,
+            "Asset Top 100 Reductions": asset_table_df
         }
 
     # Use the utility function to create the Excel file
