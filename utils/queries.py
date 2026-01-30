@@ -1648,3 +1648,90 @@ def get_gadm_emissions_sql(gadm_0_path):
         ge.subsector;
     '''
     return query_ct_emissions
+
+
+def build_country_subsector_ef_download(
+                                    annual_asset_path,
+                                    gadm_0_path,
+                                    dropdown_join,
+                                    reduction_where_sql,
+                                    region_condition,
+                                    selected_year,
+                                    exclude_forestry
+                                ):
+    
+
+    conditions = ""
+    if region_condition:
+        col = region_condition['column_name']
+        val = region_condition['column_value']
+        if isinstance(val, list):
+            val_str = "(" + ", ".join(f"'{v}'" for v in val) + ")"
+            conditions += f" and {col} IN {val_str}"
+        else:
+            val_str = f"'{val}'"
+            conditions += f" and {col} = {val_str}"
+
+    if exclude_forestry:
+        forestry_where = f'''
+            and sector <> 'forestry-and-land-use' 
+        '''
+
+    else:
+        forestry_where = " "
+    
+    country_subsector_sql_string = f'''
+        with asset as (
+            select iso3_country 
+                , country_name
+                , subsector
+                , sum(case when reduction_q_type = 'asset' then emissions_quantity else 0 end) emissions_asset
+                , sum(activity) activity_asset
+                , sum(total_emissions_reduced_per_year) reduction_potential_total
+
+            FROM '{annual_asset_path}' ae
+            {dropdown_join}
+
+            {reduction_where_sql} 
+            {forestry_where}
+
+            group by iso3_country 
+                , country_name
+                , subsector
+        ),
+
+        country as (
+            SELECT iso3_country
+                , country_name
+                , subsector
+                , SUM(emissions_quantity) AS emissions_total
+            FROM '{gadm_0_path}'
+            
+            where gas = 'co2e_100yr'
+                and year = {selected_year}
+                {conditions}
+                {forestry_where}
+            
+            GROUP BY iso3_country
+                , country_name
+                , subsector
+        )
+
+        select coalesce(a.country_name, c.country_name) country_name
+            , coalesce(a.subsector, c.subsector) subsector
+            , c.emissions_total
+            , a.emissions_asset
+            , a.activity_asset
+            , a.emissions_asset / a.activity_asset as emissions_factor_asset
+            , a.reduction_potential_total
+
+        from asset a
+        full outer join country c
+            on a.iso3_country = c.iso3_country
+            and a.subsector = c.subsector
+
+        order by coalesce(a.country_name, c.country_name) 
+            , coalesce(a.subsector, c.subsector) desc
+    '''
+
+    return country_subsector_sql_string
