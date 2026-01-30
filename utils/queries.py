@@ -1587,7 +1587,7 @@ def get_ownership_sql(annual_asset_path, ownership_path):
         ao.immediate_source_owner_entity_id,
         ao.source_operator,
         ao.source_operator_id,
-        ao.overall_share_percent,
+        ao.overall_share_percent AS parent_overall_share_pct,
         SUM(ae.emissions_quantity) AS emissions_quantity,
         SUM(ae.activity) AS activity,
         ae.activity_units,
