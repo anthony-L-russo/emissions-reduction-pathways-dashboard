@@ -178,7 +178,7 @@ with col2:
 
     st.markdown(
     """
-        <a href="/Monthly_Trends_V2" target="_self" style="text-decoration: none; display: block;">
+        <a href="/Global_Trends" target="_self" style="text-decoration: none; display: block;">
             <div class="tool-card"
                 style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <div class="tool-icon" style="font-size: 6rem;">📈</div>
