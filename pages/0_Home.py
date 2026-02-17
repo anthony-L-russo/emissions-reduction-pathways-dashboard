@@ -5,6 +5,11 @@ st.set_page_config(layout="wide")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# Tag added to avoid search engines
+st.markdown("""
+<meta name="robots" content="noindex,nofollow">
+""", unsafe_allow_html=True)
+
 # --- Style cleanup ---
 st.markdown(
     """
@@ -81,7 +86,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 
 
-# ---- 3-column layout ----
+# ---- 2-column layout ----
 col1, col2 = st.columns(2)
 
 
@@ -116,7 +121,7 @@ with col1:
         """,
         unsafe_allow_html=True
     )
-    
+
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -133,6 +138,7 @@ with col1:
         """,
         unsafe_allow_html=True
     )
+    
 
 with col2:
 
@@ -161,6 +167,23 @@ with col2:
                 <div class="tool-icon" style="font-size: 6rem;">📊</div>
                 <div class="tool-title">Monthly Trends</div>
                 <div class="tool-desc">Track month-over-month emissions patterns and sector activity worldwide.</div>
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(
+    """
+        <a href="/Global_Trends" target="_self" style="text-decoration: none; display: block;">
+            <div class="tool-card"
+                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <div class="tool-icon" style="font-size: 6rem;">🌍</div>
+                <div class="tool-title">Global Trends</div>
+                <div class="tool-desc">Explore emissions change drivers by geography and sector.</div>
             </div>
         </a>
         """,
