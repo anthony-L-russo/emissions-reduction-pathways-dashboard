@@ -39,14 +39,14 @@ def show_monthly_trends_v2():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Create columns for Change View toggle and Region dropdown
-    col_view, col_region, col_spacer = st.columns([3, 2.75, 9.2])
+    col_view, col_region, col_spacer = st.columns([3.5, 2, 9])
 
     with col_view:
         # Add title and help tooltip for the toggle
         st.markdown(
             """
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                <span style="font-size: 0.95em; font-weight: 600;">Change View</span>
+                <span style="font-size: 0.95em; font-weight: 600;">Change Time Period</span>
                 <div style="position: relative; display: inline-block;">
                     <span style="cursor: help; color: #888; font-size: 0.9em;" title="Select how to compare emissions data">ⓘ</span>
                     <div style="position: absolute; bottom: 25px; left: -100px; width: 320px; background-color: #262730; border: 1px solid #444; border-radius: 8px; padding: 12px; font-size: 0.85em; line-height: 1.8; display: none; z-index: 1000;" class="tooltip-content">
@@ -1345,7 +1345,7 @@ def show_monthly_trends_v2():
     # st.markdown("<br>", unsafe_allow_html=True)
 
     st.markdown("#### Country Subsector Movers")
-    with st.expander("# **View Top 10 country-subsector combinations by absolute change for each sector**", expanded=False):
+    with st.expander("# **View Top 10 country-subsector movers by absolute change for each sector**", expanded=False):
 
         # Query for country-subsector rankings by sector
         change_col = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -1490,8 +1490,8 @@ def show_monthly_trends_v2():
                     cell_html = f"""
                     <div style='line-height: 1.5;'>
                         <div class='country-text-cell'>{country}</div>
-                        <div class='change-text-cell change-{color_class}'>{arrow} {formatted_change} ({abs(percent_val):.1f}%)</div>
                         <div class='subsector-text-cell'>{subsector.replace('-', ' ')}</div>
+                        <div class='change-text-cell change-{color_class}'>{arrow} {formatted_change} ({abs(percent_val):.1f}%)</div>
                     </div>
                     """
                 else:
@@ -1538,6 +1538,7 @@ def show_monthly_trends_v2():
 
             .country-text-cell {{
                 font-size: 0.9em;
+                font-weight: 700;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -1554,17 +1555,17 @@ def show_monthly_trends_v2():
 
             .change-text-cell {{
                 font-weight: 600;
-                font-size: 0.85em;
+                font-size: 0.78em;
                 white-space: nowrap;
                 margin: 2px 0;
             }}
 
             .change-text-cell.change-increase {{
-                color: #ff4b4b !important;
+                color: #d9534f !important;
             }}
 
             .change-text-cell.change-decrease {{
-                color: #00cc00 !important;
+                color: #5cb85c !important;
             }}
 
             .movers-table th:first-child {{
@@ -1595,7 +1596,7 @@ def show_monthly_trends_v2():
 
         st.markdown(table_html, unsafe_allow_html=True)
 
-    # ==================== Country/Sector/Subsector Deep Dive ====================
+    # ==================== Country Subsector Drilldown ====================
     # st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### Country Subsector Drilldown")
@@ -1960,10 +1961,17 @@ def show_monthly_trends_v2():
         with col1:
             st.markdown(
                 f"""
-                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Selected Region</div>
-                    <div style="font-size: 1.1em; font-weight: bold; text-align: center; color: var(--text-color);">
-                        {selected_scope}
+                    <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: var(--text-color); margin-bottom: 12px;">
+                                {selected_scope}
+                            </div>
+                            <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
+                                tCO₂e
+                            </div>
+                        </div>
                     </div>
                 </div>
                 """,
@@ -1973,10 +1981,17 @@ def show_monthly_trends_v2():
         with col2:
             st.markdown(
                 f"""
-                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Change View</div>
-                    <div style="font-size: 1.1em; font-weight: bold; text-align: center; color: var(--text-color);">
-                        {trend_view}
+                    <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: var(--text-color); margin-bottom: 12px;">
+                                {trend_view}
+                            </div>
+                            <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
+                                tCO₂e
+                            </div>
+                        </div>
                     </div>
                 </div>
                 """,
@@ -1990,13 +2005,17 @@ def show_monthly_trends_v2():
 
             st.markdown(
                 f"""
-                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center;">
-                    <div style="font-size: 0.85em; font-weight: 600; margin-bottom: auto;">Emissions Change</div>
-                    <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_color}; margin-bottom: 12px;">
-                        {dd_arrow} {format_number_short(abs(dd_change))} <span style="color: #888;">(</span><span style="color: {dd_color};">{abs(dd_percent_change):.1f}%</span><span style="color: #888;">)</span>
-                    </div>
-                    <div style="font-size: 0.7em; text-align: center; color: #888;">
-                        tCO₂e
+                <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
+                    <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Change</div>
+                    <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_color}; margin-bottom: 12px;">
+                                {dd_arrow} {format_number_short(abs(dd_change))} <span style="color: #888;">(</span><span style="color: {dd_color};">{abs(dd_percent_change):.1f}%</span><span style="color: #888;">)</span>
+                            </div>
+                            <div style="font-size: 0.7em; text-align: center; color: #888;">
+                                tCO₂e
+                            </div>
+                        </div>
                     </div>
                 </div>
                 """,
@@ -2011,13 +2030,17 @@ def show_monthly_trends_v2():
 
                 st.markdown(
                     f"""
-                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: auto;">Activity Change</div>
-                        <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_activity_color}; margin-bottom: 12px;">
-                            {dd_activity_arrow} {abs(dd_activity_percent_change):.1f}%
-                        </div>
-                        <div style="font-size: 0.7em; text-align: center; color: #888;">
-                            {format_number_short(abs(dd_activity_change))} units
+                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
+                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Activity Change</div>
+                        <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_activity_color}; margin-bottom: 12px;">
+                                    {dd_activity_arrow} {abs(dd_activity_percent_change):.1f}%
+                                </div>
+                                <div style="font-size: 0.7em; text-align: center; color: #888;">
+                                    {format_number_short(abs(dd_activity_change))} units
+                                </div>
+                            </div>
                         </div>
                     </div>
                     """,
@@ -2026,10 +2049,17 @@ def show_monthly_trends_v2():
             else:
                 st.markdown(
                     """
-                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px; text-align: center;">Activity Change</div>
-                        <div style="font-size: 0.9em; text-align: center; color: #888; padding: 0 10px;">
-                            Select a subsector to view activity data
+                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
+                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Activity Change</div>
+                        <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div style="font-size: 0.8em; text-align: center; color: #888; padding: 0 10px; margin-bottom: 12px;">
+                                    Select a subsector to view activity data
+                                </div>
+                                <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
+                                    units
+                                </div>
+                            </div>
                         </div>
                     </div>
                     """,
@@ -2044,13 +2074,17 @@ def show_monthly_trends_v2():
 
                 st.markdown(
                     f"""
-                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: auto;">Emissions Factor Change</div>
-                        <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_ef_color}; margin-bottom: 12px;">
-                            {dd_ef_arrow} {abs(dd_ef_percent_change):.1f}%
-                        </div>
-                        <div style="font-size: 0.7em; text-align: center; color: #888;">
-                            tCO₂e per unit
+                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
+                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Factor Change</div>
+                        <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_ef_color}; margin-bottom: 12px;">
+                                    {dd_ef_arrow} {abs(dd_ef_percent_change):.1f}%
+                                </div>
+                                <div style="font-size: 0.7em; text-align: center; color: #888;">
+                                    tCO₂e per unit
+                                </div>
+                            </div>
                         </div>
                     </div>
                     """,
@@ -2059,15 +2093,24 @@ def show_monthly_trends_v2():
             else:
                 st.markdown(
                     """
-                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px; text-align: center;">Emissions Factor Change</div>
-                        <div style="font-size: 0.9em; text-align: center; color: #888; padding: 0 10px;">
-                            Select a subsector to view emissions factor data
+                    <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
+                        <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Factor Change</div>
+                        <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div style="font-size: 0.8em; text-align: center; color: #888; padding: 0 10px; margin-bottom: 12px;">
+                                    Select a subsector to view emissions factor data
+                                </div>
+                                <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
+                                    tCO₂e per unit
+                                </div>
+                            </div>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
+
+
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2092,7 +2135,7 @@ def show_monthly_trends_v2():
             else:
                 ts_where_clauses.append(f"{column_name} = '{column_value}'")
         elif selected_country != "All Countries":
-            ts_where_clauses.append(f"country_name = '{selected_country}'")
+            ts_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
 
         # Add sector filter
         if selected_sector_dd != "All Sectors":
@@ -2136,9 +2179,7 @@ def show_monthly_trends_v2():
                 else:
                     ts_asset_where_clauses.append(f"{column_name} = '{column_value}'")
             elif selected_country != "All Countries":
-                # Handle US naming
-                asset_country = "United States of America" if selected_country == "United States" else selected_country
-                ts_asset_where_clauses.append(f"country_name = '{asset_country}'")
+                ts_asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
 
             # Add sector filter
             if selected_sector_dd != "All Sectors":

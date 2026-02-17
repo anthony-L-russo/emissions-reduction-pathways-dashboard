@@ -181,9 +181,9 @@ with col2:
         <a href="/Global_Trends" target="_self" style="text-decoration: none; display: block;">
             <div class="tool-card"
                 style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">📈</div>
-                <div class="tool-title">Monthly Trends V2</div>
-                <div class="tool-desc">Enhanced global emissions analysis with YoY, YTD, and MoM views plus sector and country movers.</div>
+                <div class="tool-icon" style="font-size: 6rem;">🌍</div>
+                <div class="tool-title">Global Trends</div>
+                <div class="tool-desc">Explore emissions change drivers by geography and sector.</div>
             </div>
         </a>
         """,
