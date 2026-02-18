@@ -3,6 +3,7 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import io
 from plotly.subplots import make_subplots
 from utils.utils import format_number_short, map_region_condition, get_iso3_flag_table
 from config import CONFIG
@@ -27,6 +28,7 @@ def show_monthly_trends_v2():
         unsafe_allow_html=True
     )
 
+
     # Configure data paths
     country_subsector_stats_path = CONFIG['country_subsector_stats_path']
     country_subsector_totals_path = CONFIG['country_subsector_totals_path']
@@ -40,60 +42,84 @@ def show_monthly_trends_v2():
 
     con.register("country_flags", flag_df)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    max_date = con.execute(f"""SELECT MAX(MAKE_DATE(year, month, 1)) AS max_date
+            FROM '{country_subsector_totals_path}'
+            WHERE country_name IS NOT NULL
+    """).fetchone()[0]
+
+    # st.markdown("<br>", unsafe_allow_html=True)
+
+    # st.markdown("""
+    #     <style>
+    #     /* Find the anchor, then style the first selectbox that follows it */
+    #     #region_anchor + div [data-testid="stSelectbox"] label {
+    #         margin-bottom: -10px !important;   /* moves label closer to box */
+    #         padding-bottom: 0 !important;
+    #         line-height: 1.0 !important;
+    #     }
+
+    #     #region_anchor + div [data-testid="stSelectbox"] div[data-baseweb="select"] {
+    #         margin-top: -30px !important;      /* pulls the dropdown up */
+    #     }
+
+    #     #region_anchor + div [data-testid="stSelectbox"] {
+    #         max-width: 280px;
+    #         margin-left: auto;
+    #         margin-right: auto;
+    #     }
+    #     </style>
+    #     """, unsafe_allow_html=True)
 
     # Create columns for Change View toggle and Region dropdown
-    col_view, col_region, col_spacer = st.columns([3.5, 2, 9])
+    col_view, col_region, col_month = st.columns([3, 1.6, 3])
 
     with col_view:
-        # Add title and help tooltip for the toggle
-        st.markdown(
-            """
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                <span style="font-size: 0.95em; font-weight: 600;">Change Time Period</span>
-                <div style="position: relative; display: inline-block;">
-                    <span style="cursor: help; color: #888; font-size: 0.9em;" title="Select how to compare emissions data">ⓘ</span>
-                    <div style="position: absolute; bottom: 25px; left: -100px; width: 320px; background-color: #262730; border: 1px solid #444; border-radius: 8px; padding: 12px; font-size: 0.85em; line-height: 1.8; display: none; z-index: 1000;" class="tooltip-content">
-                        <strong>Month YoY:</strong> Compare current month to same month last year<br><br>
-                        <strong>Year-to-Date:</strong> Compare cumulative emissions from Jan to current month across years<br><br>
-                        <strong>Month-over-Month:</strong> Compare current month to previous month
-                    </div>
-                </div>
-            </div>
-            <style>
-                div:has(> span[title]):hover .tooltip-content {
-                    display: block !important;
-                }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-
-        # Three toggle options with new labels
         trend_view = st.segmented_control(
-            "View",
-            options=["Month YoY", "Year-to-Date", "Month-over-Month"],
+            label="Change Time Period",
+            options=["Month YoY", "Year-to-Date YoY", "Month-over-Month"],
             default="Month YoY",
-            label_visibility="collapsed"
         )
 
     with col_region:
-        # Region dropdown
-        st.markdown(
-            """
-            <div style="margin-bottom: 10px;">
-                <span style="font-size: 0.95em; font-weight: 600;">Region</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Pull the entire region block up
+        # st.markdown("<div style='margin-top:-300px'></div>", unsafe_allow_html=True)
+
+        # Streamlit-like label (left aligned, subtle)
+        # st.markdown(
+        #     "<div style='font-size:0.86rem; color:rgba(49,51,63,0.6); margin-bottom:0.25rem;'>Region</div>",
+        #     unsafe_allow_html=True,
+        # )
+        # Custom label styled like Streamlit
+        # st.markdown(
+        #     "<div style='font-size:0.86rem; color:rgba(49,51,63,0.6); margin-bottom:0.25rem;'>Region</div>",
+        #     unsafe_allow_html=True,
+        # )
+
         selected_scope = st.selectbox(
-            "Region",
-            region_options,
+            label="Region",
+            options=region_options,
             key="scope_selector",
-            label_visibility="collapsed"
+            # label_visibility="collapsed",
         )
+
+
         region_condition = map_region_condition(selected_scope, {})
+
+    with col_month:
+        if max_date:
+            formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+
+            st.markdown(
+                f"""
+                <div style="display:flex; justify-content:flex-end; margin-top: 4px;">
+                    <div style="text-align:right;">
+                        <div style="font-size:0.85rem; color:#6b7280;">Latest Month</div>
+                        <div style="font-size:1.0rem; font-weight:600;">{formatted_date}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     
 
@@ -194,7 +220,7 @@ def show_monthly_trends_v2():
         absolute_change = global_yoy_change
         percent_change = (absolute_change / global_previous * 100) if global_previous != 0 else 0
 
-    elif trend_view == "Year-to-Date":
+    elif trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter for YTD
         ytd_global_where_clauses = [
             "gas = 'co2e_100yr'",
@@ -285,8 +311,8 @@ def show_monthly_trends_v2():
         current_month_name = calendar.month_name[latest_month]
         card1_current_label = f"{current_month_name} {latest_year}"
         card1_previous_label = f"{current_month_name} {latest_year - 1}"
-    elif trend_view == "Year-to-Date":
-        card1_label = "Year-to-Date Change"
+    elif trend_view == "Year-to-Date YoY":
+        card1_label = "Year-to-Date YoY Change"
         card1_current_label = f"YTD {latest_year}"
         card1_previous_label = f"YTD {latest_year - 1}"
     else:  # Month-over-Month
@@ -312,7 +338,7 @@ def show_monthly_trends_v2():
     card1_previous_total = f"{global_previous:,.0f}"
 
     # Calculate country-level changes for Cards 2 & 3
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter
         country_ytd_where_clauses = [
             "gas = 'co2e_100yr'",
@@ -392,7 +418,7 @@ def show_monthly_trends_v2():
     largest_decrease_value = largest_decrease['change']
 
     # Calculate percent change for largest decrease country
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # For YTD, get cumulative values from the country totals we just calculated
         country_row = df_country_totals[df_country_totals['country_name'] == largest_decrease_country]
         if not country_row.empty:
@@ -420,7 +446,7 @@ def show_monthly_trends_v2():
     largest_decrease_percent = (largest_decrease_value / previous_total * 100) if previous_total != 0 else 0
 
     # Find the subsector driving the decrease for this country
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # Query subsector-level YTD data for this specific country
         subsector_ytd_query = f"""
             SELECT
@@ -478,7 +504,7 @@ def show_monthly_trends_v2():
     largest_increase_value = largest_increase['change']
 
     # Calculate percent change for largest increase country
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # For YTD, get cumulative values from the country totals we just calculated
         country_row_inc = df_country_totals[df_country_totals['country_name'] == largest_increase_country]
         if not country_row_inc.empty:
@@ -506,7 +532,7 @@ def show_monthly_trends_v2():
     largest_increase_percent = (largest_increase_value / previous_total_inc * 100) if previous_total_inc != 0 else 0
 
     # Find the subsector driving the increase for this country
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # Query subsector-level YTD data for this specific country
         subsector_ytd_query_inc = f"""
             SELECT
@@ -559,7 +585,7 @@ def show_monthly_trends_v2():
         subsector_increase_name = driving_subsector_increase['subsector']
 
     # Card 4: Biggest Sector Move
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter
         sector_card_ytd_where_clauses = [
             "gas = 'co2e_100yr'",
@@ -649,7 +675,7 @@ def show_monthly_trends_v2():
     biggest_sector_percent = (biggest_sector_value / biggest_sector_previous * 100) if biggest_sector_previous != 0 else 0
 
     # Card 5: Biggest Subsector Move
-    if trend_view == "Year-to-Date":
+    if trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter
         subsector_card_ytd_where_clauses = [
             "gas = 'co2e_100yr'",
@@ -851,7 +877,7 @@ def show_monthly_trends_v2():
             )
 
         # Prepare sector movers data with top 3 subsectors
-        if trend_view == "Year-to-Date":
+        if trend_view == "Year-to-Date YoY":
             # Build WHERE clause for region filter
             sector_ytd_where_clauses = [
                 "gas = 'co2e_100yr'",
@@ -964,7 +990,7 @@ def show_monthly_trends_v2():
         elif sector_breakout == "Global North/South":
             # Query with developed_un to classify by Global North/South
             # Re-query with global classification
-            if trend_view == "Year-to-Date":
+            if trend_view == "Year-to-Date YoY":
                 global_ytd_query = f"""
                     SELECT
                         sector,
@@ -1156,7 +1182,7 @@ def show_monthly_trends_v2():
 
     # ==================== Country Sector Movers Visualizations ====================
     with viz_col2:
-        st.markdown("#### Country Sector Movers")
+        st.markdown("#### Country Movers")
 
         # Add Country Sector Movers breakout toggle with label to the left
         label_col2, toggle_col2 = st.columns([0.8, 3.2], gap="small")
@@ -1172,7 +1198,7 @@ def show_monthly_trends_v2():
             )
 
         # Get country-level data broken down by sector with region filter
-        if trend_view == "Year-to-Date":
+        if trend_view == "Year-to-Date YoY":
             # Build WHERE clause for region filter
             ytd_where_clauses = [
                 "gas = 'co2e_100yr'",
@@ -1500,662 +1526,320 @@ def show_monthly_trends_v2():
                 unsafe_allow_html=True
             )
 
-    # ==================== Country Subsector Movers Table ====================
+    # ==================== Unified Country Rankings Table ====================
     # st.markdown("<br>", unsafe_allow_html=True)
-    # st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("#### Country Rankings")
 
-    st.markdown("#### Country Subsector Movers")
-    with st.expander("# **View Top 10 country-subsector movers by absolute change for each sector**", expanded=False):
+    # Add dropdowns for ranking configuration and download button
+    rank_col1, rank_col2, rank_spacer = st.columns([2.5, 2.5, 8])
 
-        # Query for country-subsector rankings by sector
-        change_col = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
-
-        if trend_view == "Year-to-Date":
-            # Build WHERE clause with region filter
-            ranking_ytd_where_clauses = [
-                "gas = 'co2e_100yr'",
-                "country_name IS NOT NULL",
-                f"year IN ({latest_year - 1}, {latest_year})",
-                f"month <= {latest_month}"
-            ]
-
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    ranking_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    ranking_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
-
-            ranking_ytd_where_clause = " AND ".join(ranking_ytd_where_clauses)
-
-            # Query YTD data for country-subsector rankings
-            ranking_ytd_query = f"""
-                SELECT
-                    country_name,
-                    iso3_country,
-                    sector,
-                    subsector,
-                    year,
-                    month,
-                    SUM(emissions_quantity) AS emissions_quantity
-                FROM '{country_subsector_totals_path}'
-                WHERE {ranking_ytd_where_clause}
-                GROUP BY country_name, iso3_country, sector, subsector, year, month
-                ORDER BY country_name, sector, subsector, year, month
-            """
-            df_ranking_ytd = con.execute(ranking_ytd_query).df()
-
-            # Calculate cumulative emissions per country-subsector per year
-            df_ranking_ytd['cumulative'] = df_ranking_ytd.groupby(['country_name', 'iso3_country', 'sector', 'subsector', 'year'])['emissions_quantity'].cumsum()
-
-            # Get current and previous year cumulative values
-            df_current_rank = df_ranking_ytd[
-                (df_ranking_ytd['year'] == latest_year) & (df_ranking_ytd['month'] == latest_month)
-            ][['country_name', 'iso3_country', 'sector', 'subsector', 'cumulative']].rename(columns={'cumulative': 'current'})
-
-            df_previous_rank = df_ranking_ytd[
-                (df_ranking_ytd['year'] == latest_year - 1) & (df_ranking_ytd['month'] == latest_month)
-            ][['country_name', 'iso3_country', 'sector', 'subsector', 'cumulative']].rename(columns={'cumulative': 'previous'})
-
-            df_rankings = df_current_rank.merge(df_previous_rank, on=['country_name', 'iso3_country', 'sector', 'subsector'], how='outer').fillna(0)
-            df_rankings['change'] = df_rankings['current'] - df_rankings['previous']
-        else:
-            # Build WHERE clause for region filter
-            ranking_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
-
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    ranking_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    ranking_where_clauses.append(f"{column_name} = '{column_value}'")
-
-            ranking_where_clause = " AND ".join(ranking_where_clauses)
-
-            # Query country-subsector data with current and previous values
-            if trend_view == "Month YoY":
-                ranking_query = f"""
-                    SELECT
-                        country_name,
-                        iso3_country,
-                        sector,
-                        subsector,
-                        SUM({emissions_column_latest}) as current,
-                        SUM(month_yoy_change) as change
-                    FROM '{country_subsector_stats_path}'
-                    WHERE {ranking_where_clause}
-                    GROUP BY country_name, iso3_country, sector, subsector
-                """
-                df_rankings = con.execute(ranking_query).df()
-                df_rankings['previous'] = df_rankings['current'] - df_rankings['change']
-            else:  # MoM
-                ranking_query = f"""
-                    SELECT
-                        country_name,
-                        iso3_country,
-                        sector,
-                        subsector,
-                        SUM({emissions_column_latest}) as current,
-                        SUM({emissions_column_prev}) as previous,
-                        SUM(mom_change) as change
-                    FROM '{country_subsector_stats_path}'
-                    WHERE {ranking_where_clause}
-                    GROUP BY country_name, iso3_country, sector, subsector
-                """
-                df_rankings = con.execute(ranking_query).df()
-
-        # Calculate percentage change
-        df_rankings['percent_change'] = df_rankings.apply(
-            lambda row: (row['change'] / row['previous'] * 100) if row['previous'] != 0 else 0,
-            axis=1
+    with rank_col1:
+        rank_metric = st.segmented_control(
+            "Rank by",
+            options=["Emissions Changes", "Total Inventory"],
+            default="Emissions Changes",
+            key="rank_metric_selector",
         )
 
-        # Add absolute change for ranking
-        df_rankings['abs_change'] = df_rankings['change'].abs()
+    with rank_col2:
+        rank_breakdown = st.segmented_control(
+            "Detail level",
+            options=["Country-Sector", "Country-Subsector"],
+            default="Country-Subsector",
+            key="rank_breakdown_selector",
+        )
+    # Determine grouping columns based on breakdown selection
+    if rank_breakdown == "Country-Subsector":
+        group_by_cols = ["country_name", "iso3_country", "sector", "subsector"]
+        detail_col = "subsector"
+    else:  # "Country-Sector"
+        group_by_cols = ["country_name", "iso3_country", "sector"]
+        detail_col = "sector"
 
-        # Get flags from the registered table and join directly with iso3_country
-        df_flags = con.execute("SELECT iso3, flag FROM country_flags").df()
-        df_flags = df_flags.rename(columns={'iso3': 'iso3_country'})
+    group_by_sql = ", ".join(group_by_cols)
 
-        # Join with flags using iso3_country that's already in df_rankings
-        df_rankings = df_rankings.merge(df_flags, on='iso3_country', how='left')
+    # Build WHERE clause with region filter
+    rank_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+    if region_condition:
+        rc_col = region_condition['column_name']
+        rc_val = region_condition['column_value']
+        if isinstance(rc_val, bool):
+            rank_where_clauses.append(f"{rc_col} = {str(rc_val).upper()}")
+        else:
+            rank_where_clauses.append(f"{rc_col} = '{rc_val}'")
 
-        # Fill missing flags with empty string
-        df_rankings['flag'] = df_rankings['flag'].fillna('')
+    # Query data based on trend_view - unified for both rank metrics
+    if trend_view == "Year-to-Date YoY":
+        rank_ytd_where = rank_where_clauses + [
+            f"year IN ({latest_year - 1}, {latest_year})",
+            f"month <= {latest_month}"
+        ]
+        rank_ytd_where_clause = " AND ".join(rank_ytd_where)
 
-        # Get top 10 overall for Global row (regardless of sector)
-        df_top10_global = df_rankings.nlargest(10, 'abs_change')[['country_name', 'subsector', 'change', 'percent_change', 'abs_change', 'flag']].copy()
-        df_top10_global['rank'] = range(1, len(df_top10_global) + 1)
-        df_top10_global['sector'] = 'Global'
-
-        # Get top 10 per sector
-        df_rankings = df_rankings.sort_values(['sector', 'abs_change'], ascending=[True, False])
-        df_top10_per_sector = df_rankings.groupby('sector').head(10).reset_index(drop=True)
-
-        # Create ranking within each sector
-        df_top10_per_sector['rank'] = df_top10_per_sector.groupby('sector').cumcount() + 1
-
-        # Sort sectors by absolute change (matching Sector Movers chart)
-        sector_totals = df_rankings.groupby('sector')['change'].sum()
-        sector_abs_totals = sector_totals.abs().sort_values(ascending=False)
-        sectors = sector_abs_totals.index.tolist()
-
-        # Create HTML table with multi-line formatted cells
-        html_rows = []
-
-        # First, add Global row
-        global_row_html = "<tr class='global-row'><td class='sector-cell global-sector-cell'>ALL</td>"
-        for rank in range(1, 11):
-            rank_data = df_top10_global[df_top10_global['rank'] == rank]
-            if not rank_data.empty:
-                country = rank_data['country_name'].iloc[0]
-                subsector = rank_data['subsector'].iloc[0]
-                change_val = rank_data['change'].iloc[0]
-                percent_val = rank_data['percent_change'].iloc[0]
-                flag = rank_data['flag'].iloc[0]
-
-                # Format the change value
-                arrow = "↑" if change_val > 0 else "↓"
-                formatted_change = format_number_short(abs(change_val))
-
-                # Determine color class for change line
-                color_class = 'increase' if change_val > 0 else 'decrease'
-
-                # Create multi-line cell HTML with flag
-                cell_html = f"""
-                <div style='line-height: 1.5;'>
-                    <div class='country-text-cell'>{flag} {country}</div>
-                    <div class='subsector-text-cell'>{subsector.replace('-', ' ')}</div>
-                    <div class='change-text-cell change-{color_class}'>{arrow} {formatted_change} ({abs(percent_val):.1f}%)</div>
-                </div>
-                """
-            else:
-                cell_html = ''
-
-            global_row_html += f"<td class='data-cell'>{cell_html}</td>"
-
-        global_row_html += "</tr>"
-        html_rows.append(global_row_html)
-
-        # Then add sector rows
-        for sector in sectors:
-            sector_data = df_top10_per_sector[df_top10_per_sector['sector'] == sector]
-            row_html = f"<tr><td class='sector-cell'>{sector.replace('-', ' ').title()}</td>"
-
-            for rank in range(1, 11):
-                rank_data = sector_data[sector_data['rank'] == rank]
-                if not rank_data.empty:
-                    country = rank_data['country_name'].iloc[0]
-                    subsector = rank_data['subsector'].iloc[0]
-                    change_val = rank_data['change'].iloc[0]
-                    percent_val = rank_data['percent_change'].iloc[0]
-                    flag = rank_data['flag'].iloc[0]
-
-                    # Format the change value
-                    arrow = "↑" if change_val > 0 else "↓"
-                    formatted_change = format_number_short(abs(change_val))
-
-                    # Determine color class for change line
-                    color_class = 'increase' if change_val > 0 else 'decrease'
-
-                    # Create multi-line cell HTML with flag
-                    cell_html = f"""
-                    <div style='line-height: 1.5;'>
-                        <div class='country-text-cell'>{flag} {country}</div>
-                        <div class='subsector-text-cell'>{subsector.replace('-', ' ')}</div>
-                        <div class='change-text-cell change-{color_class}'>{arrow} {formatted_change} ({abs(percent_val):.1f}%)</div>
-                    </div>
-                    """
-                else:
-                    cell_html = ''
-
-                row_html += f"<td class='data-cell'>{cell_html}</td>"
-
-            row_html += "</tr>"
-            html_rows.append(row_html)
-
-        # Build complete HTML table with theme-aware CSS
-        table_html = f"""
-        <style>
-            .movers-table {{
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 0.9em;
-            }}
-
-            .movers-table {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-            }}
-
-            .movers-table th {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                font-weight: 600;
-                background-color: var(--background-color);
-            }}
-
-            .movers-table .sector-cell {{
-                font-weight: 600;
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                font-size: 0.9em;
-                background-color: var(--secondary-background-color);
-            }}
-
-            .movers-table .global-row {{
-                background-color: rgba(31, 119, 255, 0.1);
-            }}
-
-            .movers-table .global-sector-cell {{
-                background-color: rgba(31, 119, 255, 0.15);
-            }}
-
-            .movers-table .data-cell {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                vertical-align: top;
-            }}
-
-            .country-text-cell {{
-                font-size: 0.9em;
-                font-weight: 700;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                color: var(--text-color);
-            }}
-
-            .subsector-text-cell {{
-                font-size: 0.72em;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                opacity: 0.6;
-            }}
-
-            .change-text-cell {{
-                font-weight: 600;
-                font-size: 0.78em;
-                white-space: nowrap;
-                margin: 2px 0;
-            }}
-
-            .change-text-cell.change-increase {{
-                color: #d9534f !important;
-            }}
-
-            .change-text-cell.change-decrease {{
-                color: #5cb85c !important;
-            }}
-
-            .movers-table th:first-child {{
-                text-align: left;
-                position: sticky;
-                left: 0;
-                z-index: 1;
-            }}
-
-            .movers-table th:not(:first-child) {{
-                text-align: center;
-            }}
-        </style>
-        <div style='overflow-x: auto;'>
-            <table class='movers-table'>
-                <thead>
-                    <tr>
-                        <th>Sector</th>
-                        {''.join([f"<th>Rank {i}</th>" for i in range(1, 11)])}
-                    </tr>
-                </thead>
-                <tbody>
-                    {''.join(html_rows)}
-                </tbody>
-            </table>
-        </div>
+        rank_ytd_query = f"""
+            SELECT
+                {group_by_sql},
+                year,
+                month,
+                SUM(emissions_quantity) AS emissions_quantity
+            FROM '{country_subsector_totals_path}'
+            WHERE {rank_ytd_where_clause}
+            GROUP BY {group_by_sql}, year, month
+            ORDER BY country_name, sector, year, month
         """
+        df_rank_ytd = con.execute(rank_ytd_query).df()
 
-        st.markdown(table_html, unsafe_allow_html=True)
+        cumsum_keys = group_by_cols + ['year']
+        df_rank_ytd['cumulative'] = df_rank_ytd.groupby(cumsum_keys)['emissions_quantity'].cumsum()
 
-    # ==================== Country Subsector Inventory ====================
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### Country Subsector Inventory")
+        df_current_rank = df_rank_ytd[
+            (df_rank_ytd['year'] == latest_year) & (df_rank_ytd['month'] == latest_month)
+        ][group_by_cols + ['cumulative']].rename(columns={'cumulative': 'current'})
 
-    with st.expander("**View inventory levels and trends by country and subsector**", expanded=False):
+        df_previous_rank = df_rank_ytd[
+            (df_rank_ytd['year'] == latest_year - 1) & (df_rank_ytd['month'] == latest_month)
+        ][group_by_cols + ['cumulative']].rename(columns={'cumulative': 'previous'})
 
-        # Build WHERE clause with region filter
-        inventory_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        df_rankings = df_current_rank.merge(df_previous_rank, on=group_by_cols, how='outer').fillna(0)
+        df_rankings['change'] = df_rankings['current'] - df_rankings['previous']
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                inventory_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                inventory_where_clauses.append(f"{column_name} = '{column_value}'")
+    else:
+        rank_where_clause = " AND ".join(rank_where_clauses)
 
-        inventory_where_clause = " AND ".join(inventory_where_clauses)
-
-        # Determine inventory calculation based on trend_view
         if trend_view == "Month YoY":
-            inventory_query = f"""
+            rank_query = f"""
                 SELECT
-                    country_name,
-                    iso3_country,
-                    sector,
-                    subsector,
-                    SUM({emissions_column_latest}) as current_inventory,
+                    {group_by_sql},
+                    SUM({emissions_column_latest}) as current,
                     SUM(month_yoy_change) as change
                 FROM '{country_subsector_stats_path}'
-                WHERE {inventory_where_clause}
-                GROUP BY country_name, iso3_country, sector, subsector
+                WHERE {rank_where_clause}
+                GROUP BY {group_by_sql}
             """
-            inventory_df = con.execute(inventory_query).df()
-            inventory_df['previous_inventory'] = inventory_df['current_inventory'] - inventory_df['change']
-            inventory_df['pct_change'] = inventory_df.apply(
-                lambda row: ((row['change'] / row['previous_inventory']) * 100) if row['previous_inventory'] != 0 else None,
-                axis=1
-            )
-        elif trend_view == "Year-to-Date":
-            inventory_ytd_where_clauses = [
-                "gas = 'co2e_100yr'",
-                "country_name IS NOT NULL",
-                f"year IN ({latest_year - 1}, {latest_year})",
-                f"month <= {latest_month}"
-            ]
-
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    inventory_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    inventory_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
-
-            inventory_ytd_where_clause = " AND ".join(inventory_ytd_where_clauses)
-
-            inventory_ytd_query = f"""
+            df_rankings = con.execute(rank_query).df()
+            df_rankings['previous'] = df_rankings['current'] - df_rankings['change']
+        else:  # Month-over-Month
+            rank_query = f"""
                 SELECT
-                    country_name,
-                    iso3_country,
-                    sector,
-                    subsector,
-                    year,
-                    month,
-                    SUM(emissions_quantity) AS emissions_quantity
-                FROM '{country_subsector_totals_path}'
-                WHERE {inventory_ytd_where_clause}
-                GROUP BY country_name, iso3_country, sector, subsector, year, month
-                ORDER BY country_name, sector, subsector, year, month
-            """
-            df_inventory_ytd = con.execute(inventory_ytd_query).df()
-            df_inventory_ytd['cumulative'] = df_inventory_ytd.groupby(['country_name', 'iso3_country', 'sector', 'subsector', 'year'])['emissions_quantity'].cumsum()
-
-            df_current_inv = df_inventory_ytd[
-                (df_inventory_ytd['year'] == latest_year) & (df_inventory_ytd['month'] == latest_month)
-            ][['country_name', 'iso3_country', 'sector', 'subsector', 'cumulative']].rename(columns={'cumulative': 'current_inventory'})
-
-            df_previous_inv = df_inventory_ytd[
-                (df_inventory_ytd['year'] == latest_year - 1) & (df_inventory_ytd['month'] == latest_month)
-            ][['country_name', 'iso3_country', 'sector', 'subsector', 'cumulative']].rename(columns={'cumulative': 'previous_inventory'})
-
-            inventory_df = df_current_inv.merge(df_previous_inv, on=['country_name', 'iso3_country', 'sector', 'subsector'], how='outer').fillna(0)
-            inventory_df['change'] = inventory_df['current_inventory'] - inventory_df['previous_inventory']
-            inventory_df['pct_change'] = inventory_df.apply(
-                lambda row: ((row['change'] / row['previous_inventory']) * 100) if row['previous_inventory'] != 0 else None,
-                axis=1
-            )
-        else:  # Month over Month
-            inventory_query = f"""
-                SELECT
-                    country_name,
-                    iso3_country,
-                    sector,
-                    subsector,
-                    SUM({emissions_column_latest}) as current_inventory,
-                    SUM({emissions_column_prev}) as previous_inventory,
+                    {group_by_sql},
+                    SUM({emissions_column_latest}) as current,
+                    SUM({emissions_column_prev}) as previous,
                     SUM(mom_change) as change
                 FROM '{country_subsector_stats_path}'
-                WHERE {inventory_where_clause}
-                GROUP BY country_name, iso3_country, sector, subsector
+                WHERE {rank_where_clause}
+                GROUP BY {group_by_sql}
             """
-            inventory_df = con.execute(inventory_query).df()
-            inventory_df['pct_change'] = inventory_df.apply(
-                lambda row: ((row['change'] / row['previous_inventory']) * 100) if row['previous_inventory'] != 0 else None,
-                axis=1
-            )
+            df_rankings = con.execute(rank_query).df()
 
-        # Join with flags
-        df_flags = con.execute("SELECT iso3, flag FROM country_flags").df()
-        df_flags = df_flags.rename(columns={'iso3': 'iso3_country'})
-        inventory_df = inventory_df.merge(df_flags, on='iso3_country', how='left')
-        inventory_df['flag'] = inventory_df['flag'].fillna('')
+    # Derived columns
+    df_rankings['pct_change'] = df_rankings.apply(
+        lambda row: (row['change'] / row['previous'] * 100) if row['previous'] != 0 else None,
+        axis=1
+    )
+    df_rankings['abs_change'] = df_rankings['change'].abs()
 
-        # Get top 10 overall for Global row
-        df_top10_global = inventory_df.nlargest(10, 'current_inventory')[['country_name', 'subsector', 'current_inventory', 'pct_change', 'flag']].copy()
-        df_top10_global['rank'] = range(1, len(df_top10_global) + 1)
-        df_top10_global['sector'] = 'Global'
+    # Join flags
+    df_flags = con.execute("SELECT iso3, flag FROM country_flags").df()
+    df_flags = df_flags.rename(columns={'iso3': 'iso3_country'})
+    df_rankings = df_rankings.merge(df_flags, on='iso3_country', how='left')
+    df_rankings['flag'] = df_rankings['flag'].fillna('')
 
-        # Get top 10 per sector
-        inventory_df = inventory_df.sort_values(['sector', 'current_inventory'], ascending=[True, False])
-        df_top10_per_sector = inventory_df.groupby('sector').head(10).reset_index(drop=True)
-        df_top10_per_sector['rank'] = df_top10_per_sector.groupby('sector').cumcount() + 1
+    # Determine ranking column and sector sort based on rank_metric
+    if rank_metric == "Emissions Changes":
+        rank_col = 'abs_change'
+        sector_sort_agg = df_rankings.groupby('sector')['change'].sum()
+        sectors = sector_sort_agg.abs().sort_values(ascending=False).index.tolist()
+    else:  # "Total Inventory"
+        rank_col = 'current'
+        sector_sort_agg = df_rankings.groupby('sector')['current'].sum()
+        sectors = sector_sort_agg.sort_values(ascending=False).index.tolist()
 
-        # Sort sectors by total inventory (largest to smallest)
-        sector_totals = inventory_df.groupby('sector')['current_inventory'].sum()
-        sector_totals_sorted = sector_totals.sort_values(ascending=False)
-        sectors = sector_totals_sorted.index.tolist()
+    # Build global top-10
+    df_top10_global = df_rankings.nlargest(10, rank_col).copy()
+    df_top10_global['rank'] = range(1, len(df_top10_global) + 1)
 
-        # Create HTML table
-        html_rows = []
+    # Build per-sector top-10
+    df_rankings_sorted = df_rankings.sort_values(['sector', rank_col], ascending=[True, False])
+    df_top10_per_sector = df_rankings_sorted.groupby('sector').head(10).reset_index(drop=True)
+    df_top10_per_sector['rank'] = df_top10_per_sector.groupby('sector').cumcount() + 1
 
-        # Global row
-        global_row_html = "<tr class='global-row'><td class='sector-cell global-sector-cell'>ALL</td>"
-        for rank in range(1, 11):
-            rank_data = df_top10_global[df_top10_global['rank'] == rank]
-            if not rank_data.empty:
-                country = rank_data['country_name'].iloc[0]
-                subsector = rank_data['subsector'].iloc[0]
-                inventory_val = rank_data['current_inventory'].iloc[0]
-                pct_val = rank_data['pct_change'].iloc[0]
-                flag = rank_data['flag'].iloc[0]
+    # Cell rendering helper - returns compact single-line HTML
+    def render_cell(row_data, is_sector_row=False):
+        if row_data.empty:
+            return ''
 
-                formatted_inventory = format_number_short(inventory_val)
+        country = row_data['country_name'].iloc[0]
+        flag = row_data['flag'].iloc[0]
+        detail_val = row_data[detail_col].iloc[0]
+        detail_text = detail_val.replace('-', ' ')
+        if detail_col == "sector":
+            detail_text = detail_text.title()
 
-                # Format percentage change
-                if pd.isna(pct_val):
-                    pct_text = 'N/A'
-                    color_class = 'neutral'
-                elif pct_val > 0:
-                    pct_text = f'↑ {abs(pct_val):.1f}%'
-                    color_class = 'increase'
-                elif pct_val < 0:
-                    pct_text = f'↓ {abs(pct_val):.1f}%'
-                    color_class = 'decrease'
-                else:
-                    pct_text = '0.0%'
-                    color_class = 'neutral'
+        # Hide detail line when it's redundant (Country-Sector mode in per-sector rows)
+        show_detail = not (detail_col == "sector" and is_sector_row)
+        detail_html = "<div class='detail-text-cell'>" + detail_text + "</div>" if show_detail else ""
 
-                cell_html = f"""
-                <div style='line-height: 1.5;'>
-                    <div class='country-text-cell'>{flag} {country}</div>
-                    <div class='subsector-text-cell'>{subsector.replace('-', ' ')}</div>
-                    <div class='inventory-text-cell'>{formatted_inventory} <span class='pct-change-text-cell pct-change-{color_class}'>({pct_text})</span></div>
-                </div>
-                """
+        country_line = "<div class='country-text-cell'>" + flag + " " + country + "</div>"
+
+        if rank_metric == "Emissions Changes":
+            change_val = row_data['change'].iloc[0]
+            pct_val = row_data['pct_change'].iloc[0]
+            arrow = "↑" if change_val > 0 else "↓"
+            formatted_change = format_number_short(abs(change_val))
+            color_class = 'increase' if change_val > 0 else 'decrease'
+            if pct_val is not None and not pd.isna(pct_val):
+                pct_display = str(round(abs(pct_val), 1))
             else:
-                cell_html = ''
+                pct_display = "N/A"
+            value_line = "<div class='change-text-cell change-" + color_class + "'>" + arrow + " " + formatted_change + " (" + pct_display + "%)</div>"
+        else:
+            inventory_val = row_data['current'].iloc[0]
+            pct_val = row_data['pct_change'].iloc[0]
+            formatted_inventory = format_number_short(inventory_val)
 
-            global_row_html += f"<td class='data-cell'>{cell_html}</td>"
+            if pd.isna(pct_val) or pct_val is None:
+                pct_text = 'N/A'
+                color_class = 'neutral'
+            elif pct_val > 0:
+                pct_text = '↑ ' + str(round(abs(pct_val), 1)) + '%'
+                color_class = 'increase'
+            elif pct_val < 0:
+                pct_text = '↓ ' + str(round(abs(pct_val), 1)) + '%'
+                color_class = 'decrease'
+            else:
+                pct_text = '0.0%'
+                color_class = 'neutral'
+            value_line = "<div class='metric-text-cell'>" + formatted_inventory + " <span class='pct-text-cell pct-" + color_class + "'>(" + pct_text + ")</span></div>"
 
-        global_row_html += "</tr>"
-        html_rows.append(global_row_html)
+        return "<div style='line-height:1.5'>" + country_line + detail_html + value_line + "</div>"
 
-        # Sector rows
-        for sector in sectors:
-            sector_data = df_top10_per_sector[df_top10_per_sector['sector'] == sector]
-            row_html = f"<tr><td class='sector-cell'>{sector.replace('-', ' ').title()}</td>"
+    # Build HTML rows
+    html_rows = []
 
-            for rank in range(1, 11):
-                rank_data = sector_data[sector_data['rank'] == rank]
-                if not rank_data.empty:
-                    country = rank_data['country_name'].iloc[0]
-                    subsector = rank_data['subsector'].iloc[0]
-                    inventory_val = rank_data['current_inventory'].iloc[0]
-                    pct_val = rank_data['pct_change'].iloc[0]
-                    flag = rank_data['flag'].iloc[0]
+    # Global "ALL" row
+    global_cells = []
+    for r in range(1, 11):
+        rd = df_top10_global[df_top10_global['rank'] == r]
+        global_cells.append("<td class='data-cell'>" + render_cell(rd, is_sector_row=False) + "</td>")
+    html_rows.append("<tr class='global-row'><td class='sector-cell global-sector-cell'>ALL</td>" + "".join(global_cells) + "</tr>")
 
-                    formatted_inventory = format_number_short(inventory_val)
+    # Per-sector rows
+    for sector in sectors:
+        sector_data = df_top10_per_sector[df_top10_per_sector['sector'] == sector]
+        sector_label = sector.replace('-', ' ').title()
+        sector_cells = []
+        for r in range(1, 11):
+            rd = sector_data[sector_data['rank'] == r]
+            sector_cells.append("<td class='data-cell'>" + render_cell(rd, is_sector_row=True) + "</td>")
+        html_rows.append("<tr><td class='sector-cell'>" + sector_label + "</td>" + "".join(sector_cells) + "</tr>")
 
-                    # Format percentage change
-                    if pd.isna(pct_val):
-                        pct_text = 'N/A'
-                        color_class = 'neutral'
-                    elif pct_val > 0:
-                        pct_text = f'↑ {abs(pct_val):.1f}%'
-                        color_class = 'increase'
-                    elif pct_val < 0:
-                        pct_text = f'↓ {abs(pct_val):.1f}%'
-                        color_class = 'decrease'
-                    else:
-                        pct_text = '0.0%'
-                        color_class = 'neutral'
+    # Build header row
+    rank_headers = "".join(["<th>Rank " + str(i) + "</th>" for i in range(1, 11)])
+    thead = "<thead><tr><th>Sector</th>" + rank_headers + "</tr></thead>"
+    tbody = "<tbody>" + "".join(html_rows) + "</tbody>"
 
-                    cell_html = f"""
-                    <div style='line-height: 1.5;'>
-                        <div class='country-text-cell'>{flag} {country}</div>
-                        <div class='subsector-text-cell'>{subsector.replace('-', ' ')}</div>
-                        <div class='inventory-text-cell'>{formatted_inventory} <span class='pct-change-text-cell pct-change-{color_class}'>({pct_text})</span></div>
-                    </div>
-                    """
-                else:
-                    cell_html = ''
+    # CSS (using regular string, not f-string, to avoid brace escaping issues)
+    table_css = """
+    <style>
+        .rankings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+            border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+        }
+        .rankings-table th {
+            border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+            padding: 10px;
+            font-weight: 600;
+            background-color: var(--background-color);
+        }
+        .rankings-table .sector-cell {
+            font-weight: 600;
+            border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+            padding: 10px;
+            font-size: 0.9em;
+            background-color: var(--secondary-background-color);
+        }
+        .rankings-table .global-row {
+            background-color: rgba(31, 119, 255, 0.1);
+        }
+        .rankings-table .global-sector-cell {
+            background-color: rgba(31, 119, 255, 0.15);
+        }
+        .rankings-table .data-cell {
+            border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+            padding: 10px;
+            vertical-align: top;
+        }
+        .country-text-cell {
+            font-size: 0.9em;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-color);
+        }
+        .detail-text-cell {
+            font-size: 0.72em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 0.6;
+        }
+        .change-text-cell {
+            font-weight: 600;
+            font-size: 0.78em;
+            white-space: nowrap;
+            margin: 2px 0;
+        }
+        .change-text-cell.change-increase {
+            color: #d9534f !important;
+        }
+        .change-text-cell.change-decrease {
+            color: #5cb85c !important;
+        }
+        .metric-text-cell {
+            font-size: 0.78em;
+            font-weight: 600;
+            color: var(--text-color);
+            margin: 2px 0;
+            white-space: nowrap;
+        }
+        .pct-text-cell {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .pct-text-cell.pct-increase {
+            color: #d9534f !important;
+        }
+        .pct-text-cell.pct-decrease {
+            color: #5cb85c !important;
+        }
+        .pct-text-cell.pct-neutral {
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+        .rankings-table th:first-child {
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .rankings-table th:not(:first-child) {
+            text-align: center;
+        }
+    </style>
+    """
 
-                row_html += f"<td class='data-cell'>{cell_html}</td>"
+    table_html = table_css + "<div style='overflow-x:auto'><table class='rankings-table'>" + thead + tbody + "</table></div>"
 
-            row_html += "</tr>"
-            html_rows.append(row_html)
+    st.markdown(table_html, unsafe_allow_html=True)
 
-        # Build complete HTML table with CSS
-        table_html = f"""
-        <style>
-            .inventory-table {{
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 0.9em;
-            }}
-
-            .inventory-table {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-            }}
-
-            .inventory-table th {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                font-weight: 600;
-                background-color: var(--background-color);
-            }}
-
-            .inventory-table .sector-cell {{
-                font-weight: 600;
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                font-size: 0.9em;
-                background-color: var(--secondary-background-color);
-            }}
-
-            .inventory-table .global-row {{
-                background-color: rgba(31, 119, 255, 0.1);
-            }}
-
-            .inventory-table .global-sector-cell {{
-                background-color: rgba(31, 119, 255, 0.15);
-            }}
-
-            .inventory-table .data-cell {{
-                border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
-                padding: 10px;
-                vertical-align: top;
-            }}
-
-            .country-text-cell {{
-                font-size: 0.9em;
-                font-weight: 700;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                color: var(--text-color);
-            }}
-
-            .subsector-text-cell {{
-                font-size: 0.72em;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                opacity: 0.6;
-            }}
-
-            .inventory-text-cell {{
-                font-size: 0.78em;
-                font-weight: 600;
-                color: var(--text-color);
-                margin: 2px 0;
-                white-space: nowrap;
-            }}
-
-            .pct-change-text-cell {{
-                font-weight: 600;
-                white-space: nowrap;
-            }}
-
-            .pct-change-text-cell.pct-change-increase {{
-                color: #d9534f !important;
-            }}
-
-            .pct-change-text-cell.pct-change-decrease {{
-                color: #5cb85c !important;
-            }}
-
-            .pct-change-text-cell.pct-change-neutral {{
-                color: var(--text-color);
-                opacity: 0.6;
-            }}
-
-            .inventory-table th:first-child {{
-                text-align: left;
-                position: sticky;
-                left: 0;
-                z-index: 1;
-            }}
-
-            .inventory-table th:not(:first-child) {{
-                text-align: center;
-            }}
-        </style>
-        <div style='overflow-x: auto;'>
-            <table class='inventory-table'>
-                <thead>
-                    <tr>
-                        <th>Sector</th>
-                        {''.join([f"<th>Rank {i}</th>" for i in range(1, 11)])}
-                    </tr>
-                </thead>
-                <tbody>
-                    {''.join(html_rows)}
-                </tbody>
-            </table>
-        </div>
-        """
-
-        st.markdown(table_html, unsafe_allow_html=True)
-
-    # ==================== Country Subsector Drilldown ====================
-    # st.markdown("<br>", unsafe_allow_html=True)
+    # ==================== Monthly Time Series ====================
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### Country Subsector Drilldown")
+    st.markdown("#### Monthly Time Series")
 
-    with st.expander("**Explore detailed emissions trends by country, sector, and subsector**", expanded=False):
+    with st.expander("**Explore monthly emissions, activity, and emissions factor trends by country, sector, and subsector**", expanded=False):
 
         # Get list of countries filtered by region
         country_rows = con.execute(
@@ -2298,7 +1982,7 @@ def show_monthly_trends_v2():
             dd_change = df_dd_emissions['change'].iloc[0]
             dd_previous = dd_latest - dd_change
 
-        elif trend_view == "Year-to-Date":
+        elif trend_view == "Year-to-Date YoY":
             # YTD calculation
             dd_ytd_where_clauses = [
                 "gas = 'co2e_100yr'",
@@ -2429,7 +2113,7 @@ def show_monthly_trends_v2():
                     dd_activity_current = dd_activity_previous = 0
                     dd_emissions_current = dd_emissions_previous = 0
 
-            elif trend_view == "Year-to-Date":
+            elif trend_view == "Year-to-Date YoY":
                 # Get YTD for current and previous year
                 ytd_asset_query = f"""
                     SELECT
@@ -2499,7 +2183,7 @@ def show_monthly_trends_v2():
 
             # Calculate emissions factor change (percentage only)
             # For YTD, use average emissions factor
-            if trend_view == "Year-to-Date":
+            if trend_view == "Year-to-Date YoY":
                 dd_ef_current = (dd_emissions_current / dd_activity_current) if dd_activity_current != 0 else 0
                 dd_ef_previous = (dd_emissions_previous / dd_activity_previous) if dd_activity_previous != 0 else 0
             else:
