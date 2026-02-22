@@ -40,14 +40,16 @@ def show_reduction_heatmap():
 
     # configure data paths and region options for querying
     annual_asset_path = CONFIG['annual_asset_path']
-    city_path = CONFIG['city_path']
+    # city_path = CONFIG['city_path']
     gadm_0_path = CONFIG['gadm_0_path']
     gadm_1_path = CONFIG['gadm_1_path']
     gadm_2_path = CONFIG['gadm_2_path']
-    country_subsector_totals_path = CONFIG['country_subsector_totals_path']
-    percentile_path = CONFIG['percentile_path']
-    region_options = CONFIG['region_options']
+    # country_subsector_totals_path = CONFIG['country_subsector_totals_path']
+    # percentile_path = CONFIG['percentile_path']
+    # region_options = CONFIG['region_options']
     gadm_0_path = CONFIG['gadm_0_path']
+    heatmap_totals_path = CONFIG['heatmap_global_totals_path']
+    heatmap_country_path = CONFIG['heatmap_global_country_path']
 
     con = duckdb.connect()
 
@@ -56,6 +58,7 @@ def show_reduction_heatmap():
         ).fetchall()
 
     country_map = {row[0]: row[1] for row in country_rows}
+    # print(country_map)
     
     unique_countries = list(country_map.keys())
 
@@ -145,20 +148,49 @@ def show_reduction_heatmap():
     #                                  gadm_2_path=gadm_2_path,
     #                                  selected_metric=selected_metric)
     
-    heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
-                                    state_selected_bool=state_selected_bool,
-                                    g20_bool=g20_bool,
-                                    region_condition=region_condition,
-                                    selected_state_province=selected_state_province,
-                                    annual_asset_path=annual_asset_path,
-                                    gadm_1_path=gadm_1_path,
-                                    gadm_2_path=gadm_2_path,
-                                    sum_column=sum_column)
-    
-    # print(heatmap_sql['sector_summary'])
-    
-    sector_df = con.execute(heatmap_sql['sector_summary']).df()
-    table_df = con.execute(heatmap_sql['table_summary']).df()
+
+    if selected_region == 'Global' and selected_metric == 'Emissions Quantity':
+        sector_df = con.execute(f'''
+            select * from '{heatmap_totals_path}'                        
+        ''').df()
+        
+        table_df = con.execute(f'''
+            select * from '{heatmap_country_path}' order by total_emissions_quantity desc                
+        ''').df()
+
+        # normalize label column
+        if "region" in sector_df.columns:
+            sector_df.rename(columns={"region": "Region"}, inplace=True)
+        if "region" in table_df.columns:
+            table_df.rename(columns={"region": "Region"}, inplace=True)
+
+    else:
+        heatmap_sql = create_heatmap_sql(country_selected_bool=country_selected_bool,
+                                        state_selected_bool=state_selected_bool,
+                                        g20_bool=g20_bool,
+                                        region_condition=region_condition,
+                                        selected_state_province=selected_state_province,
+                                        annual_asset_path=annual_asset_path,
+                                        gadm_1_path=gadm_1_path,
+                                        gadm_2_path=gadm_2_path,
+                                        sum_column=sum_column)
+        
+        # print(heatmap_sql['sector_summary'])
+        
+        sector_df = con.execute(heatmap_sql['sector_summary']).df()
+        table_df = con.execute(heatmap_sql['table_summary']).df()
+
+        # st.markdown("### DEBUG: SQL")
+        # st.code(heatmap_sql["sector_summary"], language="sql")
+        # st.code(heatmap_sql["table_summary"], language="sql")
+
+        # st.markdown("### DEBUG: shapes")
+        # st.write("sector_df shape:", sector_df.shape)
+        # st.write("table_df shape:", table_df.shape)
+
+        # st.markdown("### DEBUG: heads (unstyled)")
+        # st.dataframe(sector_df.head(10))
+        # st.dataframe(table_df.head(10))
 
     sector_df = sector_df.loc[:, ~sector_df.columns.duplicated()].copy()
     table_df  = table_df.loc[:, ~table_df.columns.duplicated()].copy()
@@ -183,9 +215,6 @@ def show_reduction_heatmap():
     combined_df = combined_df.loc[:, ~combined_df.columns.duplicated()].copy()
 
     combined_df = combined_df.drop(columns=[col for col in combined_df.columns if str(col).strip() == ""], errors="ignore")
-
-    
-
 
     # --- Define excluded and numeric columns ---
     excluded_cols = [
