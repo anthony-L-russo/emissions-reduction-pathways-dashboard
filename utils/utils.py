@@ -1006,7 +1006,7 @@ def plot_abatement_curve(gdf_asset, selected_group, selected_color, dict_color, 
         ascending_order = False
     elif selected_y == 'emissions_factor':
         y_axis_title = 'Emissions Factor (t of CO2e / Activity)'
-        ascending_order = False
+        ascending_order = True
     elif selected_y == 'asset_difficulty_score':
         y_axis_title = 'Difficulty Score (1-10)'
         ascending_order = True
