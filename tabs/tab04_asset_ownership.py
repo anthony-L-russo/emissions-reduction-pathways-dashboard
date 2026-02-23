@@ -348,19 +348,31 @@ def show_ownership_module():
 
     st.markdown("###")
     st.markdown("### Top-Emitting Assets Information")
-    # add caveat
-    st.markdown(
-    """
-    <div style="text-align:left; font-size:16px; margin-top:10px;">
-        <i>Note: selected sectors have null activity value due to data license agreement (e.g. oil-and-gas-production/transport)</i>
-    </div>
-    """,
-    unsafe_allow_html=True)
 
     # create table
-    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'parent_name', 'parent_overall_share_pct', 'immediate_source_owner', 'source_operator', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'parent_emissions_quantity', 'net_reduction_potential', 'parent_net_reduction_potential', 'ef_asset']].drop_duplicates().head(500)
-    df_table = df_table.merge(df_gadm_emissions, how='left', on=['iso3_country', 'subsector']).merge(df_global_emissions, how='left', on=['subsector'])
+    df_table = df_selected[['asset_id', 'asset_name', 'subsector', 'asset_type', 'parent_name', 'parent_overall_share_pct', 'immediate_source_owner', 'source_operator', 'iso3_country', 'activity_units', 'activity', 'emissions_quantity', 'parent_emissions_quantity', 'net_reduction_potential', 'parent_net_reduction_potential', 'ef_asset']].drop_duplicates()
+    df_table = df_table.merge(df_gadm_emissions, how='left', on=['iso3_country', 'subsector']).merge(df_global_emissions, how='left', on=['subsector']).reset_index(drop=True)
+    df_csv = df_table.to_csv(index=False).encode('utf-8')
 
+    note_col, download_col = st.columns([7, 1])
+    with note_col:
+        # add caveat
+        st.markdown(
+        """
+        <div style="text-align:left; font-size:16px; margin-top:10px;">
+            <i>Note: selected sectors have null activity value due to data license agreement (e.g. oil-and-gas-production/transport)</i>
+        </div>
+        """,
+        unsafe_allow_html=True)
+    with download_col:
+        st.download_button(
+        label="Download full data",
+        data=df_csv,
+        file_name="ownership_assets.csv",
+        mime="text/csv"
+        )
+
+    df_table = df_table.head(500)
     numeric_cols = df_table.select_dtypes(include="number").columns
     numeric_cols = [c for c in numeric_cols if c != "asset_id"]
     df_table = df_table.style.format({col: "{:,.0f}" for col in numeric_cols})
