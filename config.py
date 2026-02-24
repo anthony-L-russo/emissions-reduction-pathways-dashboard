@@ -1,5 +1,7 @@
 
 CONFIG = {
+    "latest_full_inventory_year": 2025,
+    "latest_full_ers_year": 2024,
     "asset_emissions_country_subsector_path": "data/asset_emissions/country_subsector_level/*.parquet",
     "country_subsector_stats_path": "data/statistics/country_subsector_emissions_statistics/*.parquet",
     "country_subsector_totals_path": "data/statistics/country_subsector_emissions_totals/*.parquet",
@@ -12,6 +14,8 @@ CONFIG = {
     "gadm_2_path": "data/gadm_emissions/gadm_2/*.parquet",
     "asset_ownership_path": "data/ownership/*.parquet",
     "demographic_path": "data/demographic/*.parquet",
+    "heatmap_global_totals_path": "data/heatmap_global_inventory_view/global_heatmap_emissions_totals.parquet",
+    "heatmap_global_country_path": "data/heatmap_global_inventory_view/global_heatmap_emissions_country.parquet",
     "region_options": [
         'Global', 'EU', 'OECD', 'Non-OECD',
         'UNFCCC Annex', 'UNFCCC Non-Annex', 'G20',

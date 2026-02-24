@@ -41,6 +41,7 @@ def show_emissions_reduction_plan():
     gadm_1_path = CONFIG['gadm_1_path']
     gadm_2_path = CONFIG['gadm_2_path']
     country_subsector_totals_path = CONFIG['country_subsector_totals_path']
+    country_subsector_stats_path = CONFIG['country_subsector_stats_path']
     percentile_path = CONFIG['percentile_path']
     region_options = CONFIG['region_options']
     gadm_0_path = CONFIG['gadm_0_path']

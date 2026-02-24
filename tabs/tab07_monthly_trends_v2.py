@@ -366,6 +366,7 @@ def show_monthly_trends_v2():
                 SUM(emissions_quantity) AS emissions_quantity
             FROM '{country_subsector_totals_path}'
             WHERE {country_ytd_where_clause}
+                and country_name <> 'Unknown'
             GROUP BY country_name, year, month
             ORDER BY country_name, year, month
         """
@@ -408,6 +409,7 @@ def show_monthly_trends_v2():
                 SUM({change_column}) as change
             FROM '{country_subsector_stats_path}'
             WHERE {country_totals_where_clause}
+                and country_name <> 'Unknown'
             GROUP BY country_name
         """
         df_country_totals = con.execute(country_totals_query).df()
@@ -459,6 +461,7 @@ def show_monthly_trends_v2():
                 AND country_name = '{largest_decrease_country}'
                 AND year IN ({latest_year - 1}, {latest_year})
                 AND month <= {latest_month}
+                and subsector <> 'non-broadcasting-vessels'
             GROUP BY subsector, year, month
             ORDER BY subsector, year, month
         """
@@ -491,6 +494,7 @@ def show_monthly_trends_v2():
             FROM '{country_subsector_stats_path}'
             WHERE {where_clause}
                 AND country_name = '{largest_decrease_country}'
+                and subsector <> 'non-broadcasting-vessels'
             GROUP BY subsector
         """
         df_country_subsector = con.execute(country_subsector_query).df()
@@ -703,6 +707,7 @@ def show_monthly_trends_v2():
                 SUM(emissions_quantity) AS emissions_quantity
             FROM '{country_subsector_totals_path}'
             WHERE {subsector_card_ytd_where_clause}
+                and subsector <> 'non-broadcasting-vessels'
             GROUP BY subsector, year, month
             ORDER BY subsector, year, month
         """
@@ -749,6 +754,7 @@ def show_monthly_trends_v2():
                 SUM({prev_column}) as previous
             FROM '{country_subsector_stats_path}'
             WHERE {subsector_card_where_clause}
+                and subsector <> 'non-broadcasting-vessels'
             GROUP BY subsector
         """
         df_subsector_totals = con.execute(subsector_totals_query).df()
@@ -1226,6 +1232,7 @@ def show_monthly_trends_v2():
                     SUM(emissions_quantity) AS emissions_quantity
                 FROM '{country_subsector_totals_path}'
                 WHERE {ytd_where_clause}
+                    and country_name <> 'Unknown'
                 GROUP BY country_name, sector, year, month
                 ORDER BY country_name, sector, year, month
             """
@@ -1269,6 +1276,7 @@ def show_monthly_trends_v2():
                     SUM({change_column}) as change
                 FROM '{country_subsector_stats_path}'
                 WHERE {country_movers_where_clause}
+                    and country_name <> 'Unknown'
                 GROUP BY country_name, sector
             """
             df_country_sector = con.execute(country_sector_query).df()
@@ -1559,7 +1567,7 @@ def show_monthly_trends_v2():
     group_by_sql = ", ".join(group_by_cols)
 
     # Build WHERE clause with region filter
-    rank_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+    rank_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL",]
     if region_condition:
         rc_col = region_condition['column_name']
         rc_val = region_condition['column_value']
@@ -1584,6 +1592,7 @@ def show_monthly_trends_v2():
                 SUM(emissions_quantity) AS emissions_quantity
             FROM '{country_subsector_totals_path}'
             WHERE {rank_ytd_where_clause}
+                and country_name <> 'Unknown'
             GROUP BY {group_by_sql}, year, month
             ORDER BY country_name, sector, year, month
         """
@@ -1614,6 +1623,7 @@ def show_monthly_trends_v2():
                     SUM(month_yoy_change) as change
                 FROM '{country_subsector_stats_path}'
                 WHERE {rank_where_clause}
+                    and country_name <> 'Unknown'
                 GROUP BY {group_by_sql}
             """
             df_rankings = con.execute(rank_query).df()
@@ -1627,6 +1637,7 @@ def show_monthly_trends_v2():
                     SUM(mom_change) as change
                 FROM '{country_subsector_stats_path}'
                 WHERE {rank_where_clause}
+                    and country_name <> 'Unknown'
                 GROUP BY {group_by_sql}
             """
             df_rankings = con.execute(rank_query).df()
@@ -1835,723 +1846,590 @@ def show_monthly_trends_v2():
 
     st.markdown(table_html, unsafe_allow_html=True)
 
-    # # ==================== Monthly Time Series ====================
-    # st.markdown("<br>", unsafe_allow_html=True)
-    # st.markdown("#### Monthly Time Series")
-
-    # with st.expander("**Explore monthly emissions, activity, and emissions factor trends by country, sector, and subsector**", expanded=False):
-
-    #     # Get list of countries filtered by region
-    #     country_rows = con.execute(
-    #         f"SELECT DISTINCT country_name, iso3_country FROM '{gadm_0_path}' WHERE country_name IS NOT NULL ORDER BY country_name"
-    #     ).fetchall()
-
-    #     country_map = {row[0]: row[1] for row in country_rows}
-    #     all_countries = list(country_map.keys())
-
-    #     # Filter countries based on selected region
-    #     if selected_scope == 'Global':
-    #         available_countries = all_countries
-    #     elif region_condition:
-    #         # Query to get countries in the selected region
-    #         region_col = region_condition['column_name']
-    #         region_val = region_condition['column_value']
-
-    #         if isinstance(region_val, bool):
-    #             region_filter_query = f"""
-    #                 SELECT DISTINCT country_name
-    #                 FROM '{gadm_0_path}'
-    #                 WHERE {region_col} = {str(region_val).upper()}
-    #                 AND country_name IS NOT NULL
-    #                 ORDER BY country_name
-    #             """
-    #         else:
-    #             region_filter_query = f"""
-    #                 SELECT DISTINCT country_name
-    #                 FROM '{gadm_0_path}'
-    #                 WHERE {region_col} = '{region_val}'
-    #                 AND country_name IS NOT NULL
-    #                 ORDER BY country_name
-    #             """
-
-    #         region_countries = con.execute(region_filter_query).fetchall()
-    #         available_countries = [row[0] for row in region_countries]
-    #     else:
-    #         available_countries = all_countries
-
-    #     # Get all sectors
-    #     all_sectors_query = f"""
-    #         SELECT DISTINCT sector
-    #         FROM '{country_subsector_stats_path}'
-    #         WHERE sector IS NOT NULL
-    #         ORDER BY sector
-    #     """
-    #     all_sectors = [row[0] for row in con.execute(all_sectors_query).fetchall()]
-
-    #     # Create mapping from country name to ISO3
-    #     country_to_iso3 = {country: country_map[country] for country in available_countries if country in country_map}
-
-    #     st.markdown("<br>", unsafe_allow_html=True)
-    #     st.markdown("<br>", unsafe_allow_html=True)
-
-    #     # Create three columns for dropdowns
-    #     col_country, col_sector, col_subsector = st.columns(3)
-
-    #     with col_country:
-    #         selected_country = st.selectbox(
-    #             "Country",
-    #             ["All Countries"] + available_countries,
-    #             key="deep_dive_country"
-    #         )
-
-    #     # Get ISO3 code for selected country
-    #     selected_country_iso3 = country_to_iso3.get(selected_country, None) if selected_country != "All Countries" else None
-
-    #     with col_sector:
-    #         selected_sector_dd = st.selectbox(
-    #             "Sector",
-    #             ["All Sectors"] + all_sectors,
-    #             key="deep_dive_sector"
-    #         )
-
-    #     # Get subsectors based on selected sector
-    #     if selected_sector_dd and selected_sector_dd != "All Sectors":
-    #         subsector_query = f"""
-    #             SELECT DISTINCT subsector
-    #             FROM '{country_subsector_stats_path}'
-    #             WHERE sector = '{selected_sector_dd}'
-    #             AND subsector IS NOT NULL
-    #             ORDER BY subsector
-    #         """
-    #     else:
-    #         subsector_query = f"""
-    #             SELECT DISTINCT subsector
-    #             FROM '{country_subsector_stats_path}'
-    #             WHERE subsector IS NOT NULL
-    #             ORDER BY subsector
-    #         """
-
-    #     all_subsectors = [row[0] for row in con.execute(subsector_query).fetchall()]
-
-    #     with col_subsector:
-    #         selected_subsector_dd = st.selectbox(
-    #             "Subsector",
-    #             ["All Subsectors"] + all_subsectors,
-    #             key="deep_dive_subsector"
-    #         )
-
-    #     st.markdown("<br>", unsafe_allow_html=True)
-
-    #     # ==================== Calculate metrics for cards ====================
-
-    #     # Build WHERE clauses for the query
-    #     dd_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
-
-    #     # Add region filter
-    #     if region_condition and selected_country == "All Countries":
-    #         column_name = region_condition['column_name']
-    #         column_value = region_condition['column_value']
-    #         if isinstance(column_value, bool):
-    #             dd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-    #         else:
-    #             dd_where_clauses.append(f"{column_name} = '{column_value}'")
-    #     elif selected_country != "All Countries":
-    #         dd_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
-
-    #     # Add sector filter
-    #     if selected_sector_dd != "All Sectors":
-    #         dd_where_clauses.append(f"sector = '{selected_sector_dd}'")
-
-    #     # Add subsector filter
-    #     if selected_subsector_dd != "All Subsectors":
-    #         dd_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
-
-    #     dd_where_clause = " AND ".join(dd_where_clauses)
-
-    #     # Calculate emissions change based on trend_view
-    #     if trend_view == "Month YoY":
-    #         dd_emissions_query = f"""
-    #             SELECT
-    #                 SUM({emissions_column_latest}) as latest,
-    #                 SUM(month_yoy_change) as change
-    #             FROM '{country_subsector_stats_path}'
-    #             WHERE {dd_where_clause}
-    #         """
-    #         df_dd_emissions = con.execute(dd_emissions_query).df()
-    #         dd_latest = df_dd_emissions['latest'].iloc[0]
-    #         dd_change = df_dd_emissions['change'].iloc[0]
-    #         dd_previous = dd_latest - dd_change
-
-    #     elif trend_view == "Year-to-Date YoY":
-    #         # YTD calculation
-    #         dd_ytd_where_clauses = [
-    #             "gas = 'co2e_100yr'",
-    #             "country_name IS NOT NULL",
-    #             f"year IN ({latest_year - 1}, {latest_year})",
-    #             f"month <= {latest_month}"
-    #         ]
-
-    #         # Add region/country filter
-    #         if region_condition and selected_country == "All Countries":
-    #             column_name = region_condition['column_name']
-    #             column_value = region_condition['column_value']
-    #             if isinstance(column_value, bool):
-    #                 dd_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-    #             else:
-    #                 dd_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
-    #         elif selected_country != "All Countries":
-    #             dd_ytd_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
-
-    #         # Add sector filter
-    #         if selected_sector_dd != "All Sectors":
-    #             dd_ytd_where_clauses.append(f"sector = '{selected_sector_dd}'")
-
-    #         # Add subsector filter
-    #         if selected_subsector_dd != "All Subsectors":
-    #             dd_ytd_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
-
-    #         dd_ytd_where_clause = " AND ".join(dd_ytd_where_clauses)
-
-    #         dd_ytd_query = f"""
-    #             SELECT
-    #                 year,
-    #                 month,
-    #                 SUM(emissions_quantity) AS emissions_quantity
-    #             FROM '{country_subsector_totals_path}'
-    #             WHERE {dd_ytd_where_clause}
-    #             GROUP BY year, month
-    #             ORDER BY year, month
-    #         """
-    #         df_dd_ytd = con.execute(dd_ytd_query).df()
-    #         df_dd_ytd['cumulative'] = df_dd_ytd.groupby('year')['emissions_quantity'].cumsum()
-
-    #         current_ytd = df_dd_ytd[
-    #             (df_dd_ytd['year'] == latest_year) & (df_dd_ytd['month'] == latest_month)
-    #         ]['cumulative'].sum()
-
-    #         previous_ytd = df_dd_ytd[
-    #             (df_dd_ytd['year'] == latest_year - 1) & (df_dd_ytd['month'] == latest_month)
-    #         ]['cumulative'].sum()
-
-    #         dd_latest = current_ytd
-    #         dd_previous = previous_ytd
-    #         dd_change = dd_latest - dd_previous
-
-    #     else:  # Month-over-Month
-    #         dd_emissions_query = f"""
-    #             SELECT
-    #                 SUM({emissions_column_latest}) as latest,
-    #                 SUM({emissions_column_prev}) as previous,
-    #                 SUM(mom_change) as change
-    #             FROM '{country_subsector_stats_path}'
-    #             WHERE {dd_where_clause}
-    #         """
-    #         df_dd_emissions = con.execute(dd_emissions_query).df()
-    #         dd_latest = df_dd_emissions['latest'].iloc[0]
-    #         dd_previous = df_dd_emissions['previous'].iloc[0]
-    #         dd_change = df_dd_emissions['change'].iloc[0]
-
-    #     dd_percent_change = (dd_change / dd_previous * 100) if dd_previous != 0 else 0
-
-    #     # Calculate activity and emissions factor changes (only if subsector is selected)
-    #     if selected_subsector_dd != "All Subsectors":
-    #         # Build WHERE clauses for asset query
-    #         asset_where_clauses = ["gas = 'co2e_100yr'"]
-
-    #         # Add region/country filter
-    #         if region_condition and selected_country == "All Countries":
-    #             column_name = region_condition['column_name']
-    #             column_value = region_condition['column_value']
-    #             if isinstance(column_value, bool):
-    #                 asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-    #             else:
-    #                 asset_where_clauses.append(f"{column_name} = '{column_value}'")
-    #         elif selected_country != "All Countries":
-    #             asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
-
-    #         # Add sector filter
-    #         if selected_sector_dd != "All Sectors":
-    #             asset_where_clauses.append(f"sector = '{selected_sector_dd}'")
-
-    #         # Add subsector filter
-    #         asset_where_clauses.append(f"original_inventory_sector = '{selected_subsector_dd}'")
-
-    #         # Exclude certain subsectors
-    #         asset_where_clauses.append("""original_inventory_sector NOT IN (
-    #             'forest-land-clearing', 'forest-land-degradation', 'forest-land-fires',
-    #             'net-forest-land', 'net-shrubgrass', 'net-wetland', 'removals',
-    #             'shrubgrass-fires', 'water-reservoirs', 'wetland-fires'
-    #         )""")
-
-    #         asset_where_clause = " AND ".join(asset_where_clauses)
-
-    #         # Query asset-level data for activity and emissions factor
-    #         if trend_view == "Month YoY":
-    #             # Get current month and same month last year
-    #             current_month_str = f"{latest_year}-{latest_month:02d}"
-    #             prev_year_month_str = f"{latest_year - 1}-{latest_month:02d}"
-
-    #             asset_query = f"""
-    #                 SELECT
-    #                     strftime(start_time, '%Y-%m') AS year_month,
-    #                     SUM(activity) AS activity,
-    #                     SUM(emissions_quantity) AS emissions_quantity
-    #                 FROM '{asset_path}'
-    #                 WHERE {asset_where_clause}
-    #                     AND strftime(start_time, '%Y-%m') IN ('{current_month_str}', '{prev_year_month_str}')
-    #                 GROUP BY year_month
-    #                 ORDER BY year_month
-    #             """
-    #             df_asset = con.execute(asset_query).df()
-
-    #             if len(df_asset) >= 2:
-    #                 dd_activity_current = df_asset.iloc[-1]['activity']
-    #                 dd_activity_previous = df_asset.iloc[0]['activity']
-    #                 dd_emissions_current = df_asset.iloc[-1]['emissions_quantity']
-    #                 dd_emissions_previous = df_asset.iloc[0]['emissions_quantity']
-    #             else:
-    #                 dd_activity_current = dd_activity_previous = 0
-    #                 dd_emissions_current = dd_emissions_previous = 0
-
-    #         elif trend_view == "Year-to-Date YoY":
-    #             # Get YTD for current and previous year
-    #             ytd_asset_query = f"""
-    #                 SELECT
-    #                     strftime(start_time, '%Y') AS year,
-    #                     strftime(start_time, '%m') AS month,
-    #                     SUM(activity) AS activity,
-    #                     SUM(emissions_quantity) AS emissions_quantity
-    #                 FROM '{asset_path}'
-    #                 WHERE {asset_where_clause}
-    #                     AND strftime(start_time, '%Y') IN ('{latest_year}', '{latest_year - 1}')
-    #                     AND CAST(strftime(start_time, '%m') AS INTEGER) <= {latest_month}
-    #                 GROUP BY year, month
-    #                 ORDER BY year, month
-    #             """
-    #             df_asset_ytd = con.execute(ytd_asset_query).df()
-
-    #             if not df_asset_ytd.empty:
-    #                 # Calculate cumulative for current and previous year
-    #                 df_current_year = df_asset_ytd[df_asset_ytd['year'] == str(latest_year)]
-    #                 df_prev_year = df_asset_ytd[df_asset_ytd['year'] == str(latest_year - 1)]
-
-    #                 dd_activity_current = df_current_year['activity'].sum()
-    #                 dd_activity_previous = df_prev_year['activity'].sum()
-    #                 dd_emissions_current = df_current_year['emissions_quantity'].sum()
-    #                 dd_emissions_previous = df_prev_year['emissions_quantity'].sum()
-    #             else:
-    #                 dd_activity_current = dd_activity_previous = 0
-    #                 dd_emissions_current = dd_emissions_previous = 0
-
-    #         else:  # Month-over-Month
-    #             # Get current month and previous month
-    #             if latest_month == 1:
-    #                 prev_month = 12
-    #                 prev_year = latest_year - 1
-    #             else:
-    #                 prev_month = latest_month - 1
-    #                 prev_year = latest_year
-
-    #             current_month_str = f"{latest_year}-{latest_month:02d}"
-    #             prev_month_str = f"{prev_year}-{prev_month:02d}"
-
-    #             asset_query = f"""
-    #                 SELECT
-    #                     strftime(start_time, '%Y-%m') AS year_month,
-    #                     SUM(activity) AS activity,
-    #                     SUM(emissions_quantity) AS emissions_quantity
-    #                 FROM '{asset_path}'
-    #                 WHERE {asset_where_clause}
-    #                     AND strftime(start_time, '%Y-%m') IN ('{current_month_str}', '{prev_month_str}')
-    #                 GROUP BY year_month
-    #                 ORDER BY year_month
-    #             """
-    #             df_asset = con.execute(asset_query).df()
-
-    #             if len(df_asset) >= 2:
-    #                 dd_activity_previous = df_asset.iloc[0]['activity']
-    #                 dd_activity_current = df_asset.iloc[-1]['activity']
-    #                 dd_emissions_previous = df_asset.iloc[0]['emissions_quantity']
-    #                 dd_emissions_current = df_asset.iloc[-1]['emissions_quantity']
-    #             else:
-    #                 dd_activity_current = dd_activity_previous = 0
-    #                 dd_emissions_current = dd_emissions_previous = 0
-
-    #         # Calculate activity change
-    #         dd_activity_change = dd_activity_current - dd_activity_previous
-    #         dd_activity_percent_change = (dd_activity_change / dd_activity_previous * 100) if dd_activity_previous != 0 else 0
-
-    #         # Calculate emissions factor change (percentage only)
-    #         # For YTD, use average emissions factor
-    #         if trend_view == "Year-to-Date YoY":
-    #             dd_ef_current = (dd_emissions_current / dd_activity_current) if dd_activity_current != 0 else 0
-    #             dd_ef_previous = (dd_emissions_previous / dd_activity_previous) if dd_activity_previous != 0 else 0
-    #         else:
-    #             dd_ef_current = (dd_emissions_current / dd_activity_current) if dd_activity_current != 0 else 0
-    #             dd_ef_previous = (dd_emissions_previous / dd_activity_previous) if dd_activity_previous != 0 else 0
-
-    #         dd_ef_percent_change = ((dd_ef_current - dd_ef_previous) / dd_ef_previous * 100) if dd_ef_previous != 0 else 0
-
-    #     # ==================== Display Cards ====================
-
-    #     col1, col2, col3, col4, col5 = st.columns(5)
-
-    #     with col1:
-    #         st.markdown(
-    #             f"""
-    #             <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                 <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Selected Region</div>
-    #                 <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                         <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: var(--text-color); margin-bottom: 12px;">
-    #                             {selected_scope}
-    #                         </div>
-    #                         <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
-    #                             tCO₂e
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #             </div>
-    #             """,
-    #             unsafe_allow_html=True
-    #         )
-
-    #     with col2:
-    #         st.markdown(
-    #             f"""
-    #             <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                 <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Change View</div>
-    #                 <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                         <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: var(--text-color); margin-bottom: 12px;">
-    #                             {trend_view}
-    #                         </div>
-    #                         <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
-    #                             tCO₂e
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #             </div>
-    #             """,
-    #             unsafe_allow_html=True
-    #         )
-
-    #     with col3:
-    #         # Emissions change card
-    #         dd_arrow = "↑" if dd_change > 0 else "↓"
-    #         dd_color = "red" if dd_change > 0 else "green"
-
-    #         st.markdown(
-    #             f"""
-    #             <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                 <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Change</div>
-    #                 <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                         <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_color}; margin-bottom: 12px;">
-    #                             {dd_arrow} {format_number_short(abs(dd_change))} <span style="color: #888;">(</span><span style="color: {dd_color};">{abs(dd_percent_change):.1f}%</span><span style="color: #888;">)</span>
-    #                         </div>
-    #                         <div style="font-size: 0.7em; text-align: center; color: #888;">
-    #                             tCO₂e
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #             </div>
-    #             """,
-    #             unsafe_allow_html=True
-    #         )
-
-    #     with col4:
-    #         # Activity change card (only if subsector selected)
-    #         if selected_subsector_dd != "All Subsectors":
-    #             dd_activity_arrow = "↑" if dd_activity_change > 0 else "↓"
-    #             dd_activity_color = "red" if dd_activity_change > 0 else "green"
-
-    #             st.markdown(
-    #                 f"""
-    #                 <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Activity Change</div>
-    #                     <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                             <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_activity_color}; margin-bottom: 12px;">
-    #                                 {dd_activity_arrow} {abs(dd_activity_percent_change):.1f}%
-    #                             </div>
-    #                             <div style="font-size: 0.7em; text-align: center; color: #888;">
-    #                                 {format_number_short(abs(dd_activity_change))} units
-    #                             </div>
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #                 """,
-    #                 unsafe_allow_html=True
-    #             )
-    #         else:
-    #             st.markdown(
-    #                 """
-    #                 <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Activity Change</div>
-    #                     <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                             <div style="font-size: 0.8em; text-align: center; color: #888; padding: 0 10px; margin-bottom: 12px;">
-    #                                 Select a subsector to view activity data
-    #                             </div>
-    #                             <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
-    #                                 units
-    #                             </div>
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #                 """,
-    #                 unsafe_allow_html=True
-    #             )
-
-    #     with col5:
-    #         # Emissions Factor change card (only if subsector selected)
-    #         if selected_subsector_dd != "All Subsectors":
-    #             dd_ef_arrow = "↑" if dd_ef_percent_change > 0 else "↓"
-    #             dd_ef_color = "red" if dd_ef_percent_change > 0 else "green"
-
-    #             st.markdown(
-    #                 f"""
-    #                 <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Factor Change</div>
-    #                     <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                             <div style="font-size: 1.2em; font-weight: bold; text-align: center; color: {dd_ef_color}; margin-bottom: 12px;">
-    #                                 {dd_ef_arrow} {abs(dd_ef_percent_change):.1f}%
-    #                             </div>
-    #                             <div style="font-size: 0.7em; text-align: center; color: #888;">
-    #                                 tCO₂e per unit
-    #                             </div>
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #                 """,
-    #                 unsafe_allow_html=True
-    #             )
-    #         else:
-    #             st.markdown(
-    #                 """
-    #                 <div style="border: 1px solid #999; border-radius: 10px; padding: 16px; height: 150px; display: flex; flex-direction: column;">
-    #                     <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px;">Emissions Factor Change</div>
-    #                     <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-    #                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-    #                             <div style="font-size: 0.8em; text-align: center; color: #888; padding: 0 10px; margin-bottom: 12px;">
-    #                                 Select a subsector to view emissions factor data
-    #                             </div>
-    #                             <div style="font-size: 0.7em; text-align: center; color: #888; visibility: hidden;">
-    #                                 tCO₂e per unit
-    #                             </div>
-    #                         </div>
-    #                     </div>
-    #                 </div>
-    #                 """,
-    #                 unsafe_allow_html=True
-    #             )
-
-
-
-    #     st.markdown("<br>", unsafe_allow_html=True)
-
-        # # ==================== Time Series Graphs ====================
-
-        # # Query for time series data (last 3 years)
-        # earliest_year_ts = latest_year - 3
-
-        # # Build WHERE clause for country/sector totals time series
-        # ts_where_clauses = [
-        #     "gas = 'co2e_100yr'",
-        #     "country_name IS NOT NULL",
-        #     f"year >= {earliest_year_ts}"
-        # ]
-
-        # # Add region/country filter
-        # if region_condition and selected_country == "All Countries":
-        #     column_name = region_condition['column_name']
-        #     column_value = region_condition['column_value']
-        #     if isinstance(column_value, bool):
-        #         ts_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-        #     else:
-        #         ts_where_clauses.append(f"{column_name} = '{column_value}'")
-        # elif selected_country != "All Countries":
-        #     ts_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
-
-        # # Add sector filter
-        # if selected_sector_dd != "All Sectors":
-        #     ts_where_clauses.append(f"sector = '{selected_sector_dd}'")
-
-        # # Add subsector filter
-        # if selected_subsector_dd != "All Subsectors":
-        #     ts_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
-
-        # ts_where_clause = " AND ".join(ts_where_clauses)
-
-        # # Query emissions time series
-        # ts_emissions_query = f"""
-        #     SELECT
-        #         MAKE_DATE(year, month, 1) AS year_month,
-        #         SUM(emissions_quantity) AS emissions_quantity
-        #     FROM '{country_subsector_totals_path}'
-        #     WHERE {ts_where_clause}
-        #     GROUP BY year_month
-        #     ORDER BY year_month
-        # """
-        # df_ts_emissions = con.execute(ts_emissions_query).df()
-
-        # if not df_ts_emissions.empty:
-        #     df_ts_emissions['year_month'] = pd.to_datetime(df_ts_emissions['year_month'])
-
-        # # Query asset-level data for activity and emissions factor (only if subsector selected)
-        # show_activity_and_ef = selected_subsector_dd != "All Subsectors"
-        # df_ts_asset = pd.DataFrame()
-
-        # if show_activity_and_ef:
-        #     # Build WHERE clause for asset time series
-        #     ts_asset_where_clauses = ["gas = 'co2e_100yr'"]
-
-        #     # Add region/country filter
-        #     if region_condition and selected_country == "All Countries":
-        #         column_name = region_condition['column_name']
-        #         column_value = region_condition['column_value']
-        #         if isinstance(column_value, bool):
-        #             ts_asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-        #         else:
-        #             ts_asset_where_clauses.append(f"{column_name} = '{column_value}'")
-        #     elif selected_country != "All Countries":
-        #         ts_asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
-
-        #     # Add sector filter
-        #     if selected_sector_dd != "All Sectors":
-        #         ts_asset_where_clauses.append(f"sector = '{selected_sector_dd}'")
-
-        #     # Add subsector filter
-        #     ts_asset_where_clauses.append(f"original_inventory_sector = '{selected_subsector_dd}'")
-
-        #     # Exclude certain subsectors
-        #     ts_asset_where_clauses.append("""original_inventory_sector NOT IN (
-        #         'forest-land-clearing', 'forest-land-degradation', 'forest-land-fires',
-        #         'net-forest-land', 'net-shrubgrass', 'net-wetland', 'removals',
-        #         'shrubgrass-fires', 'water-reservoirs', 'wetland-fires'
-        #     )""")
-
-        #     ts_asset_where_clause = " AND ".join(ts_asset_where_clauses)
-
-        #     # Query asset-level time series
-        #     ts_asset_query = f"""
-        #         SELECT
-        #             strftime(start_time, '%Y-%m') AS year_month,
-        #             SUM(activity) AS activity,
-        #             SUM(emissions_quantity) AS emissions_quantity
-        #         FROM '{asset_path}'
-        #         WHERE {ts_asset_where_clause}
-        #         GROUP BY year_month
-        #         ORDER BY year_month
-        #     """
-        #     df_ts_asset = con.execute(ts_asset_query).df()
-
-        #     if not df_ts_asset.empty:
-        #         df_ts_asset['year_month'] = pd.to_datetime(df_ts_asset['year_month'])
-        #         df_ts_asset['mean_emissions_factor'] = df_ts_asset['emissions_quantity'] / df_ts_asset['activity']
-
-        #         # Filter to last 3 years
-        #         cutoff_date = pd.Timestamp(year=earliest_year_ts, month=1, day=1)
-        #         df_ts_asset = df_ts_asset[df_ts_asset['year_month'] >= cutoff_date]
-
-        # # Create time series subplot
-        # num_rows = 3 if show_activity_and_ef else 1
-        # subplot_titles = ["Emissions Over Time"]
-        # if show_activity_and_ef:
-        #     subplot_titles += ["Activity Over Time", "Emission Factor Over Time"]
-
-        # fig_ts = make_subplots(
-        #     rows=num_rows,
-        #     cols=1,
-        #     shared_xaxes=True,
-        #     vertical_spacing=0.05,
-        #     subplot_titles=subplot_titles
-        # )
-
-        # # Row 1 — Emissions
-        # if not df_ts_emissions.empty:
-        #     fig_ts.add_trace(
-        #         go.Scatter(
-        #             x=df_ts_emissions['year_month'],
-        #             y=df_ts_emissions['emissions_quantity'],
-        #             mode='lines+markers',
-        #             name='Total Emissions',
-        #             line=dict(color='#E9967A')
-        #         ),
-        #         row=1, col=1
-        #     )
-
-        # # Row 2 — Activity
-        # if show_activity_and_ef and not df_ts_asset.empty:
-        #     fig_ts.add_trace(
-        #         go.Scatter(
-        #             x=df_ts_asset['year_month'],
-        #             y=df_ts_asset['activity'],
-        #             mode='lines+markers',
-        #             name='Activity',
-        #             line=dict(color='#1f77b4')
-        #         ),
-        #         row=2, col=1
-        #     )
-
-        # # Row 3 — Emissions Factor
-        # if show_activity_and_ef and not df_ts_asset.empty:
-        #     fig_ts.add_trace(
-        #         go.Scatter(
-        #             x=df_ts_asset['year_month'],
-        #             y=df_ts_asset['mean_emissions_factor'],
-        #             mode='lines+markers',
-        #             name='Emission Factor',
-        #             line=dict(color='#2ca02c')
-        #         ),
-        #         row=3, col=1
-        #     )
-
-        # # Add quarterly vertical lines
-        # if not df_ts_emissions.empty:
-        #     min_date = df_ts_emissions['year_month'].min()
-        #     max_date = df_ts_emissions['year_month'].max()
-        #     quarter_starts = pd.date_range(
-        #         start=min_date.to_period("Q").start_time,
-        #         end=max_date.to_period("Q").end_time + pd.offsets.QuarterBegin(1),
-        #         freq='QS'
-        #     )
-
-        #     for q_start in quarter_starts:
-        #         fig_ts.add_vline(
-        #             x=q_start,
-        #             line_width=1,
-        #             line_dash='dash',
-        #             line_color='gray'
-        #         )
-
-        #         fig_ts.add_annotation(
-        #             x=q_start,
-        #             y=1.01,
-        #             xref="x",
-        #             yref="paper",
-        #             text=f"Q{((q_start.month - 1) // 3 + 1)} {q_start.year}",
-        #             showarrow=False,
-        #             font=dict(size=9),
-        #             align="center"
-        #         )
-
-        # # Update y-axis labels
-        # fig_ts.update_yaxes(title_text="Emissions (tCO₂e)", row=1, col=1)
-        # if show_activity_and_ef:
-        #     fig_ts.update_yaxes(title_text="Activity", row=2, col=1)
-        #     fig_ts.update_yaxes(title_text="Emission Factor (tCO₂e/unit)", row=3, col=1)
-
-        # # Layout adjustments
-        # fig_ts.update_layout(
-        #     height=900 if show_activity_and_ef else 400,
-        #     showlegend=True,
-        #     margin=dict(t=80, b=40)
-        # )
-
-        # st.plotly_chart(fig_ts, use_container_width=True)
+    # ==================== Monthly Time Series ====================
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("#### Monthly Time Series: " + selected_scope)
+
+    with st.expander("**Explore " + selected_scope + " monthly emissions, activity, and emissions factor trends. Drill down by country, sector, and subsector**", expanded=False):
+
+        # Get list of countries from the actual data table (avoids name mismatches with gadm_0)
+        ts_country_base_filter = "country_name IS NOT NULL AND gas = 'co2e_100yr'"
+        country_rows = con.execute(
+            "SELECT DISTINCT country_name, iso3_country FROM '" + country_subsector_totals_path + "' WHERE " + ts_country_base_filter + " ORDER BY country_name"
+        ).fetchall()
+
+        country_map = {row[0]: row[1] for row in country_rows}
+        all_countries = list(country_map.keys())
+
+        # Filter countries based on selected region
+        if selected_scope == 'Global':
+            available_countries = all_countries
+        elif region_condition:
+            region_col = region_condition['column_name']
+            region_val = region_condition['column_value']
+
+            if isinstance(region_val, bool):
+                region_filter_sql = region_col + " = " + str(region_val).upper()
+            else:
+                region_filter_sql = region_col + " = '" + region_val + "'"
+
+            region_countries = con.execute(
+                "SELECT DISTINCT country_name FROM '" + country_subsector_totals_path + "' WHERE " + ts_country_base_filter + " AND " + region_filter_sql + " AND country_name <> 'Unknown' " + " ORDER BY country_name"
+            ).fetchall()
+            available_countries = [row[0] for row in region_countries]
+        else:
+            available_countries = all_countries
+
+        # Get all sectors
+        all_sectors_query = f"""
+            SELECT DISTINCT sector
+            FROM '{country_subsector_stats_path}'
+            WHERE sector IS NOT NULL
+            ORDER BY sector
+        """
+        all_sectors = [row[0] for row in con.execute(all_sectors_query).fetchall()]
+
+        # Create mapping from country name to ISO3
+        country_to_iso3 = {country: country_map[country] for country in available_countries if country in country_map}
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Create three columns for dropdowns
+        col_country, col_sector, col_subsector = st.columns(3)
+
+        with col_country:
+            selected_country = st.selectbox(
+                "Country",
+                ["All Countries"] + available_countries,
+                key="deep_dive_country"
+            )
+
+        # Get ISO3 code for selected country
+        selected_country_iso3 = country_to_iso3.get(selected_country, None) if selected_country != "All Countries" else None
+
+        with col_sector:
+            selected_sector_dd = st.selectbox(
+                "Sector",
+                ["All Sectors"] + all_sectors,
+                key="deep_dive_sector"
+            )
+
+        # Get subsectors based on selected sector
+        if selected_sector_dd and selected_sector_dd != "All Sectors":
+            subsector_query = f"""
+                SELECT DISTINCT subsector
+                FROM '{country_subsector_stats_path}'
+                WHERE sector = '{selected_sector_dd}'
+                AND subsector IS NOT NULL
+                ORDER BY subsector
+            """
+        else:
+            subsector_query = f"""
+                SELECT DISTINCT subsector
+                FROM '{country_subsector_stats_path}'
+                WHERE subsector IS NOT NULL
+                ORDER BY subsector
+            """
+
+        all_subsectors = [row[0] for row in con.execute(subsector_query).fetchall()]
+
+        with col_subsector:
+            selected_subsector_dd = st.selectbox(
+                "Subsector",
+                ["All Subsectors"] + all_subsectors,
+                key="deep_dive_subsector"
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ==================== Calculate metrics for ALL 3 time periods ====================
+
+        # Scope label for card titles
+        if selected_country != "All Countries":
+            scope_label = selected_country
+        else:
+            scope_label = selected_scope
+
+        # --- Build shared WHERE clauses ---
+        dd_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        if region_condition and selected_country == "All Countries":
+            column_name = region_condition['column_name']
+            column_value = region_condition['column_value']
+            if isinstance(column_value, bool):
+                dd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
+            else:
+                dd_where_clauses.append(f"{column_name} = '{column_value}'")
+        elif selected_country != "All Countries":
+            dd_where_clauses.append(f"country_name = '{selected_country}'")
+        if selected_sector_dd != "All Sectors":
+            dd_where_clauses.append(f"sector = '{selected_sector_dd}'")
+        if selected_subsector_dd != "All Subsectors":
+            dd_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
+        dd_where_clause = " AND ".join(dd_where_clauses)
+
+        # --- Emissions: MoM + YoY from stats table (single query) ---
+        dd_stats_query = f"""
+            SELECT
+                SUM({emissions_column_latest}) as latest,
+                SUM({emissions_column_prev}) as prev_month,
+                SUM(mom_change) as mom_change,
+                SUM(month_yoy_change) as yoy_change
+            FROM '{country_subsector_stats_path}'
+            WHERE {dd_where_clause}
+        """
+        df_dd_stats = con.execute(dd_stats_query).df()
+        em_latest = df_dd_stats['latest'].iloc[0] or 0
+        em_prev_month = df_dd_stats['prev_month'].iloc[0] or 0
+        em_mom_change = df_dd_stats['mom_change'].iloc[0] or 0
+        em_yoy_change = df_dd_stats['yoy_change'].iloc[0] or 0
+        em_yoy_previous = em_latest - em_yoy_change
+
+        em_mom_pct = (em_mom_change / em_prev_month * 100) if em_prev_month != 0 else 0
+        em_yoy_pct = (em_yoy_change / em_yoy_previous * 100) if em_yoy_previous != 0 else 0
+
+        # --- Emissions: YTD from totals table ---
+        dd_ytd_where_clauses = [
+            "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+            f"year IN ({latest_year - 1}, {latest_year})",
+            f"month <= {latest_month}"
+        ]
+        if region_condition and selected_country == "All Countries":
+            column_name = region_condition['column_name']
+            column_value = region_condition['column_value']
+            if isinstance(column_value, bool):
+                dd_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
+            else:
+                dd_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+        elif selected_country != "All Countries":
+            dd_ytd_where_clauses.append(f"country_name = '{selected_country}'")
+        if selected_sector_dd != "All Sectors":
+            dd_ytd_where_clauses.append(f"sector = '{selected_sector_dd}'")
+        if selected_subsector_dd != "All Subsectors":
+            dd_ytd_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
+        dd_ytd_where_clause = " AND ".join(dd_ytd_where_clauses)
+
+        df_dd_ytd = con.execute(f"""
+            SELECT year, month, SUM(emissions_quantity) AS emissions_quantity
+            FROM '{country_subsector_totals_path}'
+            WHERE {dd_ytd_where_clause}
+            GROUP BY year, month ORDER BY year, month
+        """).df()
+        df_dd_ytd['cumulative'] = df_dd_ytd.groupby('year')['emissions_quantity'].cumsum()
+        em_ytd_current = df_dd_ytd[
+            (df_dd_ytd['year'] == latest_year) & (df_dd_ytd['month'] == latest_month)
+        ]['cumulative'].sum()
+        em_ytd_previous = df_dd_ytd[
+            (df_dd_ytd['year'] == latest_year - 1) & (df_dd_ytd['month'] == latest_month)
+        ]['cumulative'].sum()
+        em_ytd_change = em_ytd_current - em_ytd_previous
+        em_ytd_pct = (em_ytd_change / em_ytd_previous * 100) if em_ytd_previous != 0 else 0
+
+        # --- Activity / EF metrics (only when subsector selected) ---
+        show_activity_and_ef_cards = selected_subsector_dd != "All Subsectors"
+
+        if show_activity_and_ef_cards:
+            asset_where_clauses = ["gas = 'co2e_100yr'"]
+            if region_condition and selected_country == "All Countries":
+                column_name = region_condition['column_name']
+                column_value = region_condition['column_value']
+                if isinstance(column_value, bool):
+                    asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
+                else:
+                    asset_where_clauses.append(f"{column_name} = '{column_value}'")
+            elif selected_country != "All Countries":
+                asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
+            if selected_sector_dd != "All Sectors":
+                asset_where_clauses.append(f"sector = '{selected_sector_dd}'")
+            asset_where_clauses.append(f"original_inventory_sector = '{selected_subsector_dd}'")
+            asset_where_clauses.append("""original_inventory_sector NOT IN (
+                'forest-land-clearing', 'forest-land-degradation', 'forest-land-fires',
+                'net-forest-land', 'net-shrubgrass', 'net-wetland', 'removals',
+                'shrubgrass-fires', 'water-reservoirs', 'wetland-fires')""")
+            asset_where_clause = " AND ".join(asset_where_clauses)
+
+            # Month strings for MoM + YoY
+            if latest_month == 1:
+                prev_m, prev_y = 12, latest_year - 1
+            else:
+                prev_m, prev_y = latest_month - 1, latest_year
+            current_month_str = f"{latest_year}-{latest_month:02d}"
+            prev_month_str = f"{prev_y}-{prev_m:02d}"
+            yoy_prev_str = f"{latest_year - 1}-{latest_month:02d}"
+
+            # Single query for MoM + YoY months
+            months_in = ", ".join([f"'{m}'" for m in set([current_month_str, prev_month_str, yoy_prev_str])])
+            df_asset_card = con.execute(f"""
+                SELECT strftime(start_time, '%Y-%m') AS year_month,
+                       SUM(activity) AS activity, SUM(emissions_quantity) AS emissions_quantity
+                FROM '{asset_path}'
+                WHERE {asset_where_clause} AND strftime(start_time, '%Y-%m') IN ({months_in})
+                GROUP BY year_month ORDER BY year_month
+            """).df()
+
+            def _get_asset(df, ym):
+                row = df[df['year_month'] == ym]
+                return (row.iloc[0]['activity'], row.iloc[0]['emissions_quantity']) if not row.empty else (0, 0)
+
+            act_cur, em_asset_cur = _get_asset(df_asset_card, current_month_str)
+            act_prev_m, em_asset_prev_m = _get_asset(df_asset_card, prev_month_str)
+            act_yoy_prev, em_asset_yoy_prev = _get_asset(df_asset_card, yoy_prev_str)
+
+            act_mom_change = act_cur - act_prev_m
+            act_mom_pct = (act_mom_change / act_prev_m * 100) if act_prev_m != 0 else 0
+            act_yoy_change = act_cur - act_yoy_prev
+            act_yoy_pct = (act_yoy_change / act_yoy_prev * 100) if act_yoy_prev != 0 else 0
+
+            ef_cur = (em_asset_cur / act_cur) if act_cur != 0 else 0
+            ef_prev_m = (em_asset_prev_m / act_prev_m) if act_prev_m != 0 else 0
+            ef_yoy_prev = (em_asset_yoy_prev / act_yoy_prev) if act_yoy_prev != 0 else 0
+            ef_mom_change = ef_cur - ef_prev_m
+            ef_mom_pct = (ef_mom_change / ef_prev_m * 100) if ef_prev_m != 0 else 0
+            ef_yoy_change = ef_cur - ef_yoy_prev
+            ef_yoy_pct = (ef_yoy_change / ef_yoy_prev * 100) if ef_yoy_prev != 0 else 0
+
+            # YTD from asset table
+            df_asset_ytd = con.execute(f"""
+                SELECT strftime(start_time, '%Y') AS year,
+                       SUM(activity) AS activity, SUM(emissions_quantity) AS emissions_quantity
+                FROM '{asset_path}'
+                WHERE {asset_where_clause}
+                    AND strftime(start_time, '%Y') IN ('{latest_year}', '{latest_year - 1}')
+                    AND CAST(strftime(start_time, '%m') AS INTEGER) <= {latest_month}
+                GROUP BY year ORDER BY year
+            """).df()
+
+            def _get_ytd_asset(df, yr):
+                row = df[df['year'] == str(yr)]
+                return (row.iloc[0]['activity'], row.iloc[0]['emissions_quantity']) if not row.empty else (0, 0)
+
+            act_ytd_cur, em_ytd_cur_asset = _get_ytd_asset(df_asset_ytd, latest_year)
+            act_ytd_prev, em_ytd_prev_asset = _get_ytd_asset(df_asset_ytd, latest_year - 1)
+            act_ytd_change = act_ytd_cur - act_ytd_prev
+            act_ytd_pct = (act_ytd_change / act_ytd_prev * 100) if act_ytd_prev != 0 else 0
+
+            ef_ytd_cur = (em_ytd_cur_asset / act_ytd_cur) if act_ytd_cur != 0 else 0
+            ef_ytd_prev = (em_ytd_prev_asset / act_ytd_prev) if act_ytd_prev != 0 else 0
+            ef_ytd_change = ef_ytd_cur - ef_ytd_prev
+            ef_ytd_pct = (ef_ytd_change / ef_ytd_prev * 100) if ef_ytd_prev != 0 else 0
+
+        # ==================== Display 3 Cards ====================
+
+        def _fmt_ef(val):
+            if val == 0:
+                return "0"
+            if abs(val) >= 1000:
+                return format_number_short(val)
+            if abs(val) >= 1:
+                return f"{val:,.2f}"
+            return f"{val:.4f}"
+
+        # Pick the right change/inventory values based on trend_view
+        if trend_view == "Month YoY":
+            tv_short = "Month YoY"
+            em_change, em_pct = em_yoy_change, em_yoy_pct
+            em_cur_val, em_prev_val = em_latest, em_yoy_previous
+            cur_label = month_name[latest_month][:3] + " " + str(latest_year)
+            prev_label = month_name[latest_month][:3] + " " + str(latest_year - 1)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_yoy_change, act_yoy_pct
+                act_cur_val, act_prev_val = act_cur, act_yoy_prev
+                ef_change_val, ef_pct_val = ef_yoy_change, ef_yoy_pct
+                ef_cur_val, ef_prev_val = ef_cur, ef_yoy_prev
+        elif trend_view == "Year-to-Date YoY":
+            tv_short = "YTD YoY"
+            em_change, em_pct = em_ytd_change, em_ytd_pct
+            em_cur_val, em_prev_val = em_ytd_current, em_ytd_previous
+            cur_label = "Jan-" + month_name[latest_month][:3] + " " + str(latest_year)
+            prev_label = "Jan-" + month_name[latest_month][:3] + " " + str(latest_year - 1)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_ytd_change, act_ytd_pct
+                act_cur_val, act_prev_val = act_ytd_cur, act_ytd_prev
+                ef_change_val, ef_pct_val = ef_ytd_change, ef_ytd_pct
+                ef_cur_val, ef_prev_val = ef_ytd_cur, ef_ytd_prev
+        else:  # Month-over-Month
+            tv_short = "MoM"
+            em_change, em_pct = em_mom_change, em_mom_pct
+            em_cur_val, em_prev_val = em_latest, em_prev_month
+            cur_label = month_name[latest_month][:3] + " " + str(latest_year)
+            if latest_month == 1:
+                prev_label = month_name[12][:3] + " " + str(latest_year - 1)
+            else:
+                prev_label = month_name[latest_month - 1][:3] + " " + str(latest_year)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_mom_change, act_mom_pct
+                act_cur_val, act_prev_val = act_cur, act_prev_m
+                ef_change_val, ef_pct_val = ef_mom_change, ef_mom_pct
+                ef_cur_val, ef_prev_val = ef_cur, ef_prev_m
+
+        card_css = "border: 1px solid #999; border-radius: 10px; padding: 16px; height: 180px; display: flex; flex-direction: column;"
+
+        col1, col2, col3 = st.columns(3)
+
+        em_arrow = "↑" if em_change > 0 else "↓"
+        em_color = "red" if em_change > 0 else "green"
+
+        with col1:
+            st.markdown(f"""
+                <div style="{card_css}">
+                    <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions ({tv_short})</div>
+                    <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {em_color}; margin-bottom: 28px;">
+                        {em_arrow} {format_number_short(abs(em_change))} <span style="color: #888;">(</span><span style="color: {em_color};">{abs(em_pct):.1f}%</span><span style="color: #888;">)</span>
+                    </div>
+                    <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                        <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{em_cur_val:,.0f}</span> tCO₂e</div>
+                        <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{em_prev_val:,.0f}</span> tCO₂e</div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+        with col2:
+            if show_activity_and_ef_cards:
+                act_arrow = "↑" if act_change_val > 0 else "↓"
+                act_color = "red" if act_change_val > 0 else "green"
+                st.markdown(f"""
+                    <div style="{card_css}">
+                        <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Activity ({tv_short})</div>
+                        <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {act_color}; margin-bottom: 28px;">
+                            {act_arrow} {format_number_short(abs(act_change_val))} <span style="color: #888;">(</span><span style="color: {act_color};">{abs(act_pct_val):.1f}%</span><span style="color: #888;">)</span>
+                        </div>
+                        <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{act_cur_val:,.0f}</span></div>
+                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{act_prev_val:,.0f}</span></div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                    <div style="{card_css} justify-content: center; align-items: center;">
+                        <div style="font-size: 0.95em; color: #888; text-align: center;">Select a subsector to view activity data</div>
+                    </div>""", unsafe_allow_html=True)
+
+        with col3:
+            if show_activity_and_ef_cards:
+                ef_arrow = "↑" if ef_change_val > 0 else "↓"
+                ef_color = "red" if ef_change_val > 0 else "green"
+                st.markdown(f"""
+                    <div style="{card_css}">
+                        <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions Factor ({tv_short})</div>
+                        <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {ef_color}; margin-bottom: 28px;">
+                            {ef_arrow} {abs(ef_pct_val):.1f}%
+                        </div>
+                        <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_cur_val)}</span> tCO₂e/unit</div>
+                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_prev_val)}</span> tCO₂e/unit</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                    <div style="{card_css} justify-content: center; align-items: center;">
+                        <div style="font-size: 0.95em; color: #888; text-align: center;">Select a subsector to view emissions factor data</div>
+                    </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ==================== Time Series Graphs ====================
+
+        # Query for time series data (last 3 years)
+        earliest_year_ts = latest_year - 3
+
+        # Build WHERE clause for country/sector totals time series
+        ts_where_clauses = [
+            "gas = 'co2e_100yr'",
+            "country_name IS NOT NULL",
+            f"year >= {earliest_year_ts}"
+        ]
+
+        # Add region/country filter
+        if region_condition and selected_country == "All Countries":
+            column_name = region_condition['column_name']
+            column_value = region_condition['column_value']
+            if isinstance(column_value, bool):
+                ts_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
+            else:
+                ts_where_clauses.append(f"{column_name} = '{column_value}'")
+        elif selected_country != "All Countries":
+            ts_where_clauses.append(f"country_name = '{selected_country}'")
+
+        # Add sector filter
+        if selected_sector_dd != "All Sectors":
+            ts_where_clauses.append(f"sector = '{selected_sector_dd}'")
+
+        # Add subsector filter
+        if selected_subsector_dd != "All Subsectors":
+            ts_where_clauses.append(f"subsector = '{selected_subsector_dd}'")
+
+        ts_where_clause = " AND ".join(ts_where_clauses)
+
+        # Query emissions time series
+        ts_emissions_query = f"""
+            SELECT
+                MAKE_DATE(year, month, 1) AS year_month,
+                SUM(emissions_quantity) AS emissions_quantity
+            FROM '{country_subsector_totals_path}'
+            WHERE {ts_where_clause}
+            GROUP BY year_month
+            ORDER BY year_month
+        """
+        df_ts_emissions = con.execute(ts_emissions_query).df()
+
+        if not df_ts_emissions.empty:
+            df_ts_emissions['year_month'] = pd.to_datetime(df_ts_emissions['year_month'])
+
+        # Query asset-level time series (always runs for emissions line, like tab03)
+        ts_asset_where_clauses = ["gas = 'co2e_100yr'"]
+
+        # Add region/country filter
+        if region_condition and selected_country == "All Countries":
+            column_name = region_condition['column_name']
+            column_value = region_condition['column_value']
+            if isinstance(column_value, bool):
+                ts_asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
+            else:
+                ts_asset_where_clauses.append(f"{column_name} = '{column_value}'")
+        elif selected_country != "All Countries":
+            ts_asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
+
+        # Add sector filter
+        if selected_sector_dd != "All Sectors":
+            ts_asset_where_clauses.append(f"sector = '{selected_sector_dd}'")
+
+        # Add subsector filter (only when selected)
+        if selected_subsector_dd != "All Subsectors":
+            ts_asset_where_clauses.append(f"original_inventory_sector = '{selected_subsector_dd}'")
+
+        # Exclude forestry subsectors
+        ts_asset_where_clauses.append("""original_inventory_sector NOT IN (
+            'forest-land-clearing', 'forest-land-degradation', 'forest-land-fires',
+            'net-forest-land', 'net-shrubgrass', 'net-wetland', 'removals',
+            'shrubgrass-fires', 'water-reservoirs', 'wetland-fires')""")
+
+        ts_asset_where_clause = " AND ".join(ts_asset_where_clauses)
+
+        df_ts_asset = con.execute(f"""
+            SELECT
+                strftime(start_time, '%Y-%m') AS year_month,
+                SUM(activity) AS activity,
+                SUM(emissions_quantity) AS emissions_quantity
+            FROM '{asset_path}'
+            WHERE {ts_asset_where_clause}
+            GROUP BY year_month
+            ORDER BY year_month
+        """).df()
+
+        if not df_ts_asset.empty:
+            df_ts_asset['year_month'] = pd.to_datetime(df_ts_asset['year_month'])
+            df_ts_asset['mean_emissions_factor'] = df_ts_asset['emissions_quantity'] / df_ts_asset['activity']
+            cutoff_date = pd.Timestamp(year=earliest_year_ts, month=1, day=1)
+            df_ts_asset = df_ts_asset[df_ts_asset['year_month'] >= cutoff_date]
+
+        # Create time series subplot
+        show_activity_and_ef = selected_subsector_dd != "All Subsectors"
+        num_rows = 3 if show_activity_and_ef else 1
+        subplot_titles = ["Emissions Over Time"]
+        if show_activity_and_ef:
+            subplot_titles += ["Activity Over Time", "Emission Factor Over Time"]
+
+        fig_ts = make_subplots(
+            rows=num_rows,
+            cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            subplot_titles=subplot_titles
+        )
+
+        # Row 1 — Asset emissions line (always shown)
+        if not df_ts_asset.empty:
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df_ts_asset['year_month'],
+                    y=df_ts_asset['emissions_quantity'],
+                    mode='lines+markers',
+                    name='Assets'
+                ),
+                row=1, col=1
+            )
+
+        # Row 1 — Total emissions line
+        if not df_ts_emissions.empty:
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df_ts_emissions['year_month'],
+                    y=df_ts_emissions['emissions_quantity'],
+                    mode='lines+markers',
+                    name='Total',
+                    line=dict(color='#E9967A')
+                ),
+                row=1, col=1
+            )
+
+        # Row 2 — Activity (subsector only)
+        if show_activity_and_ef and not df_ts_asset.empty:
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df_ts_asset['year_month'],
+                    y=df_ts_asset['activity'],
+                    mode='lines+markers',
+                    name='Activity',
+                    line=dict(color='#1f77b4')
+                ),
+                row=2, col=1
+            )
+
+        # Row 3 — Emissions Factor (subsector only)
+        if show_activity_and_ef and not df_ts_asset.empty:
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df_ts_asset['year_month'],
+                    y=df_ts_asset['mean_emissions_factor'],
+                    mode='lines+markers',
+                    name='Emission Factor',
+                    line=dict(color='#2ca02c')
+                ),
+                row=3, col=1
+            )
+
+        # Add quarterly vertical lines
+        if not df_ts_emissions.empty:
+            min_date = df_ts_emissions['year_month'].min()
+            max_date = df_ts_emissions['year_month'].max()
+            quarter_starts = pd.date_range(
+                start=min_date.to_period("Q").start_time,
+                end=max_date.to_period("Q").end_time + pd.offsets.QuarterBegin(1),
+                freq='QS'
+            )
+
+            for q_start in quarter_starts:
+                fig_ts.add_vline(
+                    x=q_start,
+                    line_width=1,
+                    line_dash='dash',
+                    line_color='gray'
+                )
+
+                fig_ts.add_annotation(
+                    x=q_start,
+                    y=1.01,
+                    xref="x",
+                    yref="paper",
+                    text=f"Q{((q_start.month - 1) // 3 + 1)} {q_start.year}",
+                    showarrow=False,
+                    font=dict(size=9),
+                    align="center"
+                )
+
+        # Update y-axis labels
+        fig_ts.update_yaxes(title_text="Emissions (tCO₂e)", row=1, col=1)
+        if show_activity_and_ef:
+            fig_ts.update_yaxes(title_text="Activity", row=2, col=1)
+            fig_ts.update_yaxes(title_text="Emission Factor (tCO₂e/unit)", row=3, col=1)
+
+        # Layout adjustments
+        fig_ts.update_layout(
+            height=900 if show_activity_and_ef else 400,
+            showlegend=True,
+            margin=dict(t=80, b=40)
+        )
+
+        st.plotly_chart(fig_ts, use_container_width=True)
 
     # ==================== Download Section ====================
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2579,17 +2457,16 @@ def show_monthly_trends_v2():
         "country_breakout": country_breakout,
         "rank_metric": rank_metric,
         "rank_breakdown": rank_breakdown,
-        # "selected_country": selected_country,
-        # "selected_sector_dd": selected_sector_dd,
-        # "selected_subsector_dd": selected_subsector_dd,
-        #"show_activity_and_ef": show_activity_and_ef,
+        "selected_country": selected_country,
+        "selected_sector_dd": selected_sector_dd,
+        "selected_subsector_dd": selected_subsector_dd,
         "df_sector_viz": df_sector_viz,
         "df_country_sector": df_country_sector,
         "all_increases": all_increases,
         "all_decreases": all_decreases,
         "df_rankings": df_rankings,
-        #"df_ts_emissions": df_ts_emissions,
-        #"df_ts_asset": df_ts_asset,
+        "df_ts_emissions": df_ts_emissions,
+        "df_ts_asset": df_ts_asset,
         "stats_path": country_subsector_stats_path,
     }
 
@@ -2630,118 +2507,185 @@ def show_monthly_trends_v2():
             # Only this block is highlighted
             st.markdown('<div class="dl-highlight">', unsafe_allow_html=True)
 
-            dl_cols = st.columns([1.2, 1.3, 1.3, 1.3, 1])
+            dl_cols = st.columns([0.5, 1.1, 1.2, 1.2, 1.3, 1.1, 1.5])
 
-            with dl_cols[0]:
-                dl_sector = st.checkbox("Sector Movers", key="dl_sector", value=True)
             with dl_cols[1]:
-                dl_country = st.checkbox("Country Movers", key="dl_country", value=True)
+                dl_sector = st.checkbox("Sector Movers", key="dl_sector", value=True)
             with dl_cols[2]:
-                dl_rankings_cb = st.checkbox("Country Rankings", key="dl_rankings", value=True)
+                dl_country = st.checkbox("Country Movers", key="dl_country", value=True)
             with dl_cols[3]:
-                dl_raw = st.checkbox("All Raw Data", key="dl_raw", value=True)
+                dl_rankings_cb = st.checkbox("Country Rankings", key="dl_rankings", value=True)
+            with dl_cols[4]:
+                dl_timeseries = st.checkbox("Monthly Time Series", key="dl_timeseries", value=True)
+            with dl_cols[5]:
+                dl_raw = st.checkbox("Raw Statistics", key="dl_raw", value=True)
 
             st.markdown("</div>", unsafe_allow_html=True)  # end highlight
 
-            any_selected = dl_sector or dl_country or dl_rankings_cb or dl_raw
+            any_selected = dl_sector or dl_country or dl_rankings_cb or dl_timeseries or dl_raw
 
-            with dl_cols[4]:
+            with dl_cols[6]:
                 if not any_selected:
                     st.download_button(
-                        label="Download",
+                        label="Download Data",
                         data=b"",
                         file_name="emissions_data.xlsx",
-                        disabled=False,
+                        disabled=True,
                         icon=":material/download:",
+                        use_container_width=True,
                     )
                     st.markdown("</div>", unsafe_allow_html=True)  # end dl-wrap
                     return
 
-                # Build Excel only when user actually clicks Download (optional improvement below)
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                # Build Excel — keyed on all user inputs so cache invalidates properly
+                def _build_excel(data_dict, selections):
+                    buf = io.BytesIO()
+                    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
 
-                    def write_metadata(ws, metadata_pairs):
-                        bold = writer.book.add_format({"bold": True})
-                        for i, (k, v) in enumerate(metadata_pairs):
-                            ws.write(i, 0, k, bold)
-                            ws.write(i, 1, str(v))
+                        def write_metadata(ws, metadata_pairs):
+                            bold = writer.book.add_format({"bold": True})
+                            for i, (k, v) in enumerate(metadata_pairs):
+                                ws.write(i, 0, k, bold)
+                                ws.write(i, 1, str(v))
 
-                    if dl_sector:
-                        metadata = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Breakout", data["sector_breakout"]),
-                        ]
-                        start = len(metadata) + 1
-                        data["df_sector_viz"].to_excel(writer, sheet_name="Sector Movers", startrow=start, index=False)
-                        write_metadata(writer.sheets["Sector Movers"], metadata)
+                        if selections["sector"]:
+                            metadata = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Breakout", data_dict["sector_breakout"]),
+                            ]
+                            start = len(metadata) + 1
+                            df_sec_out = data_dict["df_sector_viz"].copy()
+                            # Sort: sector by highest absolute change, then subsector by highest absolute change within sector
+                            sector_abs_totals = df_sec_out.groupby("sector")["change"].sum().abs().rename("_sector_abs_total")
+                            df_sec_out = df_sec_out.merge(sector_abs_totals, on="sector")
+                            df_sec_out["_abs_change"] = df_sec_out["change"].abs()
+                            df_sec_out = df_sec_out.sort_values(["_sector_abs_total", "_abs_change"], ascending=[False, False]).drop(columns=["_sector_abs_total", "_abs_change"])
+                            if data_dict["sector_breakout"] == "Total Net Change":
+                                df_sec_out = df_sec_out.drop(columns=["subsector"], errors="ignore")
+                            df_sec_out.to_excel(writer, sheet_name="Sector Movers", startrow=start, index=False)
+                            write_metadata(writer.sheets["Sector Movers"], metadata)
 
-                    if dl_country:
-                        base_meta = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Breakout", data["country_breakout"]),
-                        ]
+                        if selections["country"]:
+                            base_meta = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Breakout", data_dict["country_breakout"]),
+                            ]
 
-                        inc_meta = base_meta + [("Direction", "Increases")]
-                        start = len(inc_meta) + 1
-                        df_inc = data["df_country_sector"][data["df_country_sector"]["country_name"].isin(data["all_increases"])]
-                        df_inc.to_excel(writer, sheet_name="Country Movers - Up", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Movers - Up"], inc_meta)
+                            inc_meta = base_meta + [("Direction", "Increases")]
+                            start = len(inc_meta) + 1
+                            df_inc = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_increases"])].copy()
+                            # Sort: country total change desc, then subsector change desc within each country
+                            country_totals_inc = df_inc.groupby("country_name")["change"].sum().rename("_country_total")
+                            df_inc = df_inc.merge(country_totals_inc, on="country_name")
+                            df_inc = df_inc.sort_values(["_country_total", "change"], ascending=[False, False]).drop(columns=["_country_total"])
+                            if data_dict["country_breakout"] == "Total Net Change":
+                                df_inc = df_inc.drop(columns=["sector"], errors="ignore")
+                            df_inc.to_excel(writer, sheet_name="Country Movers - Increase", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Movers - Increase"], inc_meta)
 
-                        dec_meta = base_meta + [("Direction", "Decreases")]
-                        start = len(dec_meta) + 1
-                        df_dec = data["df_country_sector"][data["df_country_sector"]["country_name"].isin(data["all_decreases"])]
-                        df_dec.to_excel(writer, sheet_name="Country Movers - Down", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Movers - Down"], dec_meta)
+                            dec_meta = base_meta + [("Direction", "Decreases")]
+                            start = len(dec_meta) + 1
+                            df_dec = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_decreases"])].copy()
+                            # Sort: country total change asc (largest decrease first), then subsector change asc
+                            country_totals_dec = df_dec.groupby("country_name")["change"].sum().rename("_country_total")
+                            df_dec = df_dec.merge(country_totals_dec, on="country_name")
+                            df_dec = df_dec.sort_values(["_country_total", "change"], ascending=[True, True]).drop(columns=["_country_total"])
+                            if data_dict["country_breakout"] == "Total Net Change":
+                                df_dec = df_dec.drop(columns=["sector"], errors="ignore")
+                            df_dec.to_excel(writer, sheet_name="Country Movers - Decrease", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Movers - Decrease"], dec_meta)
 
-                    if dl_rankings_cb:
-                        metadata = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Ranking Metric", data["rank_metric"]),
-                            ("Grouping Level", data["rank_breakdown"]),
-                        ]
-                        start = len(metadata) + 1
-                        data["df_rankings"].to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Rankings"], metadata)
+                        if selections["rankings"]:
+                            metadata = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Ranking Metric", data_dict["rank_metric"]),
+                                ("Grouping Level", data_dict["rank_breakdown"]),
+                            ]
+                            start = len(metadata) + 1
+                            data_dict["df_rankings"].to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Rankings"], metadata)
 
-                    if dl_raw:
-                        raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
-                        rc = data["region_condition"]
-                        if rc:
-                            if isinstance(rc["column_value"], bool):
-                                raw_where.append(f"{rc['column_name']} = {str(rc['column_value']).upper()}")
-                            else:
-                                raw_where.append(f"{rc['column_name']} = '{rc['column_value']}'")
-                        raw_where_clause = " AND ".join(raw_where)
+                        if selections["timeseries"]:
+                            ts_meta = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Country", data_dict["selected_country"]),
+                                ("Sector", data_dict["selected_sector_dd"]),
+                                ("Subsector", data_dict["selected_subsector_dd"]),
+                            ]
+                            start = len(ts_meta) + 1
 
-                        raw_con = duckdb.connect()
-                        df_raw = raw_con.execute(
-                            f"SELECT * FROM '{data['stats_path']}' WHERE {raw_where_clause}"
-                        ).df()
-                        raw_con.close()
+                            df_em = data_dict["df_ts_emissions"]
+                            df_asset = data_dict["df_ts_asset"]
 
-                        metadata = [
-                            ("Region", data["selected_scope"]),
-                            ("Filters", "gas = co2e_100yr, country_name IS NOT NULL"),
-                        ]
-                        start = len(metadata) + 1
-                        df_raw.to_excel(writer, sheet_name="All Raw Data", startrow=start, index=False)
-                        write_metadata(writer.sheets["All Raw Data"], metadata)
+                            if not df_em.empty:
+                                df_ts = df_em[["year_month", "emissions_quantity"]].copy()
 
-                output.seek(0)
+                                # Add asset emissions as a separate column
+                                if not df_asset.empty:
+                                    df_asset_merge = df_asset[["year_month", "emissions_quantity"]].rename(
+                                        columns={"emissions_quantity": "asset_emissions_quantity"}
+                                    )
+                                    df_ts = df_ts.merge(df_asset_merge, on="year_month", how="left")
+
+                                    # Only include activity/EF when a subsector is selected
+                                    if data_dict["selected_subsector_dd"] != "All Subsectors":
+                                        df_act_ef = df_asset[["year_month", "activity", "mean_emissions_factor"]]
+                                        df_ts = df_ts.merge(df_act_ef, on="year_month", how="left")
+
+                                df_ts.to_excel(writer, sheet_name="Monthly Time Series", startrow=start, index=False)
+                                write_metadata(writer.sheets["Monthly Time Series"], ts_meta)
+
+                        if selections["raw"]:
+                            raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+                            rc = data_dict["region_condition"]
+                            if rc:
+                                if isinstance(rc["column_value"], bool):
+                                    raw_where.append(f"{rc['column_name']} = {str(rc['column_value']).upper()}")
+                                else:
+                                    raw_where.append(f"{rc['column_name']} = '{rc['column_value']}'")
+                            raw_where_clause = " AND ".join(raw_where)
+
+                            raw_con = duckdb.connect()
+                            df_raw = raw_con.execute(
+                                f"SELECT * FROM '{data_dict['stats_path']}' WHERE {raw_where_clause}"
+                            ).df()
+                            raw_con.close()
+
+                            metadata = [
+                                ("Region", data_dict["selected_scope"]),
+                                ("Filters", "gas = co2e_100yr, country_name IS NOT NULL"),
+                            ]
+                            start = len(metadata) + 1
+                            df_raw.to_excel(writer, sheet_name="Raw Statistics", startrow=start, index=False)
+                            write_metadata(writer.sheets["Raw Statistics"], metadata)
+
+                    buf.seek(0)
+                    return buf.getvalue()
+
+                sels = {
+                    "sector": dl_sector,
+                    "country": dl_country,
+                    "rankings": dl_rankings_cb,
+                    "timeseries": dl_timeseries,
+                    "raw": dl_raw,
+                }
+
+                excel_bytes = _build_excel(data, sels)
 
                 st.download_button(
-                    label="Download",
-                    data=output.getvalue(),  # bytes is safest
+                    label="Download Data",
+                    data=excel_bytes,
                     file_name="emissions_data.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     icon=":material/download:",
+                    use_container_width=True,
                 )
 
         st.markdown("</div>", unsafe_allow_html=True)  # end dl-wrap
