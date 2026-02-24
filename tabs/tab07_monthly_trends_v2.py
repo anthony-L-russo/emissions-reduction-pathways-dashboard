@@ -1848,9 +1848,9 @@ def show_monthly_trends_v2():
 
     # ==================== Monthly Time Series ====================
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### Monthly Time Series")
+    st.markdown("#### Monthly Time Series: " + selected_scope)
 
-    with st.expander("**Explore monthly emissions, activity, and emissions factor trends by country, sector, and subsector**", expanded=False):
+    with st.expander("**Explore " + selected_scope + " monthly emissions, activity, and emissions factor trends. Drill down by country, sector, and subsector**", expanded=False):
 
         # Get list of countries from the actual data table (avoids name mismatches with gadm_0)
         ts_country_base_filter = "country_name IS NOT NULL AND gas = 'co2e_100yr'"
@@ -2115,8 +2115,6 @@ def show_monthly_trends_v2():
 
         # ==================== Display 3 Cards ====================
 
-        month_label = month_name[latest_month][:3] + " " + str(latest_year)
-
         def _fmt_ef(val):
             if val == 0:
                 return "0"
@@ -2126,76 +2124,104 @@ def show_monthly_trends_v2():
                 return f"{val:,.2f}"
             return f"{val:.4f}"
 
-        def _change_line(label, change, pct, show_abs=True):
-            arrow = "↑" if change > 0 else ("↓" if change < 0 else "→")
-            color = "red" if change > 0 else ("green" if change < 0 else "#888")
-            abs_part = f" {format_number_short(abs(change))}" if show_abs else ""
-            return f"""<div style="text-align:center;font-size:1.1em;font-weight:bold;color:{color};margin-bottom:4px;">
-                {arrow}{abs_part} <span style="color:#888;">(</span>{abs(pct):.1f}%<span style="color:#888;">)</span>
-                <span style="font-size:0.6em;font-weight:400;color:#888;margin-left:2px;">{label}</span>
-            </div>"""
+        # Pick the right change/inventory values based on trend_view
+        if trend_view == "Month YoY":
+            tv_short = "Month YoY"
+            em_change, em_pct = em_yoy_change, em_yoy_pct
+            em_cur_val, em_prev_val = em_latest, em_yoy_previous
+            cur_label = month_name[latest_month][:3] + " " + str(latest_year)
+            prev_label = month_name[latest_month][:3] + " " + str(latest_year - 1)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_yoy_change, act_yoy_pct
+                act_cur_val, act_prev_val = act_cur, act_yoy_prev
+                ef_change_val, ef_pct_val = ef_yoy_change, ef_yoy_pct
+                ef_cur_val, ef_prev_val = ef_cur, ef_yoy_prev
+        elif trend_view == "Year-to-Date YoY":
+            tv_short = "YTD YoY"
+            em_change, em_pct = em_ytd_change, em_ytd_pct
+            em_cur_val, em_prev_val = em_ytd_current, em_ytd_previous
+            cur_label = "Jan-" + month_name[latest_month][:3] + " " + str(latest_year)
+            prev_label = "Jan-" + month_name[latest_month][:3] + " " + str(latest_year - 1)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_ytd_change, act_ytd_pct
+                act_cur_val, act_prev_val = act_ytd_cur, act_ytd_prev
+                ef_change_val, ef_pct_val = ef_ytd_change, ef_ytd_pct
+                ef_cur_val, ef_prev_val = ef_ytd_cur, ef_ytd_prev
+        else:  # Month-over-Month
+            tv_short = "MoM"
+            em_change, em_pct = em_mom_change, em_mom_pct
+            em_cur_val, em_prev_val = em_latest, em_prev_month
+            cur_label = month_name[latest_month][:3] + " " + str(latest_year)
+            if latest_month == 1:
+                prev_label = month_name[12][:3] + " " + str(latest_year - 1)
+            else:
+                prev_label = month_name[latest_month - 1][:3] + " " + str(latest_year)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_mom_change, act_mom_pct
+                act_cur_val, act_prev_val = act_cur, act_prev_m
+                ef_change_val, ef_pct_val = ef_mom_change, ef_mom_pct
+                ef_cur_val, ef_prev_val = ef_cur, ef_prev_m
 
-        card_css = "border: 1px solid #999; border-radius: 10px; padding: 16px; height: 200px; display: flex; flex-direction: column;"
+        card_css = "border: 1px solid #999; border-radius: 10px; padding: 16px; height: 180px; display: flex; flex-direction: column;"
 
         col1, col2, col3 = st.columns(3)
+
+        em_arrow = "↑" if em_change > 0 else "↓"
+        em_color = "red" if em_change > 0 else "green"
 
         with col1:
             st.markdown(f"""
                 <div style="{card_css}">
-                    <div style="font-size: 0.9em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions</div>
-                    <div style="margin-top: auto; margin-bottom: 12px;">
-                        {_change_line("MoM", em_mom_change, em_mom_pct)}
-                        {_change_line("YoY", em_yoy_change, em_yoy_pct)}
-                        {_change_line("YTD", em_ytd_change, em_ytd_pct)}
+                    <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions ({tv_short})</div>
+                    <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {em_color}; margin-bottom: 28px;">
+                        {em_arrow} {format_number_short(abs(em_change))} <span style="color: #888;">(</span><span style="color: {em_color};">{abs(em_pct):.1f}%</span><span style="color: #888;">)</span>
                     </div>
-                    <div style="font-size: 0.78em; color: #888; line-height: 1.4; padding-left: 8px;">
-                        <div>{month_label}: <span style="font-weight: 600; color: var(--text-color);">{format_number_short(em_latest)}</span> tCO₂e</div>
-                        <div>YTD: <span style="font-weight: 600; color: var(--text-color);">{format_number_short(em_ytd_current)}</span> tCO₂e</div>
+                    <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                        <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{em_cur_val:,.0f}</span> tCO₂e</div>
+                        <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{em_prev_val:,.0f}</span> tCO₂e</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
 
         with col2:
             if show_activity_and_ef_cards:
+                act_arrow = "↑" if act_change_val > 0 else "↓"
+                act_color = "red" if act_change_val > 0 else "green"
                 st.markdown(f"""
                     <div style="{card_css}">
-                        <div style="font-size: 0.9em; font-weight: 600; margin-bottom: auto;">{scope_label} Activity</div>
-                        <div style="margin-top: auto; margin-bottom: 12px;">
-                            {_change_line("MoM", act_mom_change, act_mom_pct)}
-                            {_change_line("YoY", act_yoy_change, act_yoy_pct)}
-                            {_change_line("YTD", act_ytd_change, act_ytd_pct)}
+                        <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Activity ({tv_short})</div>
+                        <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {act_color}; margin-bottom: 28px;">
+                            {act_arrow} {format_number_short(abs(act_change_val))} <span style="color: #888;">(</span><span style="color: {act_color};">{abs(act_pct_val):.1f}%</span><span style="color: #888;">)</span>
                         </div>
-                        <div style="font-size: 0.78em; color: #888; line-height: 1.4; padding-left: 8px;">
-                            <div>{month_label}: <span style="font-weight: 600; color: var(--text-color);">{format_number_short(act_cur)}</span></div>
-                            <div>YTD: <span style="font-weight: 600; color: var(--text-color);">{format_number_short(act_ytd_cur)}</span></div>
+                        <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{act_cur_val:,.0f}</span></div>
+                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{act_prev_val:,.0f}</span></div>
                         </div>
                     </div>""", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
-                    <div style="{card_css}">
-                        <div style="font-size: 0.9em; font-weight: 600; margin-bottom: auto;">Activity</div>
-                        <div style="font-size: 0.85em; color: #888; text-align: center; margin: auto 0;">Select a subsector to view activity data</div>
+                    <div style="{card_css} justify-content: center; align-items: center;">
+                        <div style="font-size: 0.95em; color: #888; text-align: center;">Select a subsector to view activity data</div>
                     </div>""", unsafe_allow_html=True)
 
         with col3:
             if show_activity_and_ef_cards:
+                ef_arrow = "↑" if ef_change_val > 0 else "↓"
+                ef_color = "red" if ef_change_val > 0 else "green"
                 st.markdown(f"""
                     <div style="{card_css}">
-                        <div style="font-size: 0.9em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions Factor</div>
-                        <div style="margin-top: auto; margin-bottom: 12px;">
-                            {_change_line("MoM", ef_mom_change, ef_mom_pct, show_abs=False)}
-                            {_change_line("YoY", ef_yoy_change, ef_yoy_pct, show_abs=False)}
-                            {_change_line("YTD", ef_ytd_change, ef_ytd_pct, show_abs=False)}
+                        <div style="font-size: 0.95em; font-weight: 600; margin-bottom: auto;">{scope_label} Emissions Factor ({tv_short})</div>
+                        <div style="font-size: 1.4em; font-weight: bold; text-align: center; color: {ef_color}; margin-bottom: 28px;">
+                            {ef_arrow} {abs(ef_pct_val):.1f}%
                         </div>
-                        <div style="font-size: 0.78em; color: #888; line-height: 1.4; padding-left: 8px;">
-                            <div>{month_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_cur)}</span> tCO₂e/unit</div>
-                            <div>YTD: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_ytd_cur)}</span> tCO₂e/unit</div>
+                        <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
+                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_cur_val)}</span> tCO₂e/unit</div>
+                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_prev_val)}</span> tCO₂e/unit</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
-                    <div style="{card_css}">
-                        <div style="font-size: 0.9em; font-weight: 600; margin-bottom: auto;">Emissions Factor</div>
-                        <div style="font-size: 0.85em; color: #888; text-align: center; margin: auto 0;">Select a subsector to view emissions factor data</div>
+                    <div style="{card_css} justify-content: center; align-items: center;">
+                        <div style="font-size: 0.95em; color: #888; text-align: center;">Select a subsector to view emissions factor data</div>
                     </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -2431,17 +2457,16 @@ def show_monthly_trends_v2():
         "country_breakout": country_breakout,
         "rank_metric": rank_metric,
         "rank_breakdown": rank_breakdown,
-        # "selected_country": selected_country,
-        # "selected_sector_dd": selected_sector_dd,
-        # "selected_subsector_dd": selected_subsector_dd,
-        #"show_activity_and_ef": show_activity_and_ef,
+        "selected_country": selected_country,
+        "selected_sector_dd": selected_sector_dd,
+        "selected_subsector_dd": selected_subsector_dd,
         "df_sector_viz": df_sector_viz,
         "df_country_sector": df_country_sector,
         "all_increases": all_increases,
         "all_decreases": all_decreases,
         "df_rankings": df_rankings,
-        #"df_ts_emissions": df_ts_emissions,
-        #"df_ts_asset": df_ts_asset,
+        "df_ts_emissions": df_ts_emissions,
+        "df_ts_asset": df_ts_asset,
         "stats_path": country_subsector_stats_path,
     }
 
@@ -2482,118 +2507,185 @@ def show_monthly_trends_v2():
             # Only this block is highlighted
             st.markdown('<div class="dl-highlight">', unsafe_allow_html=True)
 
-            dl_cols = st.columns([1.2, 1.3, 1.3, 1.3, 1])
+            dl_cols = st.columns([0.5, 1.1, 1.2, 1.2, 1.3, 1.1, 1.5])
 
-            with dl_cols[0]:
-                dl_sector = st.checkbox("Sector Movers", key="dl_sector", value=True)
             with dl_cols[1]:
-                dl_country = st.checkbox("Country Movers", key="dl_country", value=True)
+                dl_sector = st.checkbox("Sector Movers", key="dl_sector", value=True)
             with dl_cols[2]:
-                dl_rankings_cb = st.checkbox("Country Rankings", key="dl_rankings", value=True)
+                dl_country = st.checkbox("Country Movers", key="dl_country", value=True)
             with dl_cols[3]:
-                dl_raw = st.checkbox("All Raw Data", key="dl_raw", value=True)
+                dl_rankings_cb = st.checkbox("Country Rankings", key="dl_rankings", value=True)
+            with dl_cols[4]:
+                dl_timeseries = st.checkbox("Monthly Time Series", key="dl_timeseries", value=True)
+            with dl_cols[5]:
+                dl_raw = st.checkbox("Raw Statistics", key="dl_raw", value=True)
 
             st.markdown("</div>", unsafe_allow_html=True)  # end highlight
 
-            any_selected = dl_sector or dl_country or dl_rankings_cb or dl_raw
+            any_selected = dl_sector or dl_country or dl_rankings_cb or dl_timeseries or dl_raw
 
-            with dl_cols[4]:
+            with dl_cols[6]:
                 if not any_selected:
                     st.download_button(
-                        label="Download",
+                        label="Download Data",
                         data=b"",
                         file_name="emissions_data.xlsx",
-                        disabled=False,
+                        disabled=True,
                         icon=":material/download:",
+                        use_container_width=True,
                     )
                     st.markdown("</div>", unsafe_allow_html=True)  # end dl-wrap
                     return
 
-                # Build Excel only when user actually clicks Download (optional improvement below)
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                # Build Excel — keyed on all user inputs so cache invalidates properly
+                def _build_excel(data_dict, selections):
+                    buf = io.BytesIO()
+                    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
 
-                    def write_metadata(ws, metadata_pairs):
-                        bold = writer.book.add_format({"bold": True})
-                        for i, (k, v) in enumerate(metadata_pairs):
-                            ws.write(i, 0, k, bold)
-                            ws.write(i, 1, str(v))
+                        def write_metadata(ws, metadata_pairs):
+                            bold = writer.book.add_format({"bold": True})
+                            for i, (k, v) in enumerate(metadata_pairs):
+                                ws.write(i, 0, k, bold)
+                                ws.write(i, 1, str(v))
 
-                    if dl_sector:
-                        metadata = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Breakout", data["sector_breakout"]),
-                        ]
-                        start = len(metadata) + 1
-                        data["df_sector_viz"].to_excel(writer, sheet_name="Sector Movers", startrow=start, index=False)
-                        write_metadata(writer.sheets["Sector Movers"], metadata)
+                        if selections["sector"]:
+                            metadata = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Breakout", data_dict["sector_breakout"]),
+                            ]
+                            start = len(metadata) + 1
+                            df_sec_out = data_dict["df_sector_viz"].copy()
+                            # Sort: sector by highest absolute change, then subsector by highest absolute change within sector
+                            sector_abs_totals = df_sec_out.groupby("sector")["change"].sum().abs().rename("_sector_abs_total")
+                            df_sec_out = df_sec_out.merge(sector_abs_totals, on="sector")
+                            df_sec_out["_abs_change"] = df_sec_out["change"].abs()
+                            df_sec_out = df_sec_out.sort_values(["_sector_abs_total", "_abs_change"], ascending=[False, False]).drop(columns=["_sector_abs_total", "_abs_change"])
+                            if data_dict["sector_breakout"] == "Total Net Change":
+                                df_sec_out = df_sec_out.drop(columns=["subsector"], errors="ignore")
+                            df_sec_out.to_excel(writer, sheet_name="Sector Movers", startrow=start, index=False)
+                            write_metadata(writer.sheets["Sector Movers"], metadata)
 
-                    if dl_country:
-                        base_meta = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Breakout", data["country_breakout"]),
-                        ]
+                        if selections["country"]:
+                            base_meta = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Breakout", data_dict["country_breakout"]),
+                            ]
 
-                        inc_meta = base_meta + [("Direction", "Increases")]
-                        start = len(inc_meta) + 1
-                        df_inc = data["df_country_sector"][data["df_country_sector"]["country_name"].isin(data["all_increases"])]
-                        df_inc.to_excel(writer, sheet_name="Country Movers - Up", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Movers - Up"], inc_meta)
+                            inc_meta = base_meta + [("Direction", "Increases")]
+                            start = len(inc_meta) + 1
+                            df_inc = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_increases"])].copy()
+                            # Sort: country total change desc, then subsector change desc within each country
+                            country_totals_inc = df_inc.groupby("country_name")["change"].sum().rename("_country_total")
+                            df_inc = df_inc.merge(country_totals_inc, on="country_name")
+                            df_inc = df_inc.sort_values(["_country_total", "change"], ascending=[False, False]).drop(columns=["_country_total"])
+                            if data_dict["country_breakout"] == "Total Net Change":
+                                df_inc = df_inc.drop(columns=["sector"], errors="ignore")
+                            df_inc.to_excel(writer, sheet_name="Country Movers - Increase", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Movers - Increase"], inc_meta)
 
-                        dec_meta = base_meta + [("Direction", "Decreases")]
-                        start = len(dec_meta) + 1
-                        df_dec = data["df_country_sector"][data["df_country_sector"]["country_name"].isin(data["all_decreases"])]
-                        df_dec.to_excel(writer, sheet_name="Country Movers - Down", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Movers - Down"], dec_meta)
+                            dec_meta = base_meta + [("Direction", "Decreases")]
+                            start = len(dec_meta) + 1
+                            df_dec = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_decreases"])].copy()
+                            # Sort: country total change asc (largest decrease first), then subsector change asc
+                            country_totals_dec = df_dec.groupby("country_name")["change"].sum().rename("_country_total")
+                            df_dec = df_dec.merge(country_totals_dec, on="country_name")
+                            df_dec = df_dec.sort_values(["_country_total", "change"], ascending=[True, True]).drop(columns=["_country_total"])
+                            if data_dict["country_breakout"] == "Total Net Change":
+                                df_dec = df_dec.drop(columns=["sector"], errors="ignore")
+                            df_dec.to_excel(writer, sheet_name="Country Movers - Decrease", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Movers - Decrease"], dec_meta)
 
-                    if dl_rankings_cb:
-                        metadata = [
-                            ("Time Period", data["trend_view"]),
-                            ("Comparison", data["time_period_desc"]),
-                            ("Region", data["selected_scope"]),
-                            ("Ranking Metric", data["rank_metric"]),
-                            ("Grouping Level", data["rank_breakdown"]),
-                        ]
-                        start = len(metadata) + 1
-                        data["df_rankings"].to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
-                        write_metadata(writer.sheets["Country Rankings"], metadata)
+                        if selections["rankings"]:
+                            metadata = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Comparison", data_dict["time_period_desc"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Ranking Metric", data_dict["rank_metric"]),
+                                ("Grouping Level", data_dict["rank_breakdown"]),
+                            ]
+                            start = len(metadata) + 1
+                            data_dict["df_rankings"].to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
+                            write_metadata(writer.sheets["Country Rankings"], metadata)
 
-                    if dl_raw:
-                        raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
-                        rc = data["region_condition"]
-                        if rc:
-                            if isinstance(rc["column_value"], bool):
-                                raw_where.append(f"{rc['column_name']} = {str(rc['column_value']).upper()}")
-                            else:
-                                raw_where.append(f"{rc['column_name']} = '{rc['column_value']}'")
-                        raw_where_clause = " AND ".join(raw_where)
+                        if selections["timeseries"]:
+                            ts_meta = [
+                                ("Time Period", data_dict["trend_view"]),
+                                ("Region", data_dict["selected_scope"]),
+                                ("Country", data_dict["selected_country"]),
+                                ("Sector", data_dict["selected_sector_dd"]),
+                                ("Subsector", data_dict["selected_subsector_dd"]),
+                            ]
+                            start = len(ts_meta) + 1
 
-                        raw_con = duckdb.connect()
-                        df_raw = raw_con.execute(
-                            f"SELECT * FROM '{data['stats_path']}' WHERE {raw_where_clause}"
-                        ).df()
-                        raw_con.close()
+                            df_em = data_dict["df_ts_emissions"]
+                            df_asset = data_dict["df_ts_asset"]
 
-                        metadata = [
-                            ("Region", data["selected_scope"]),
-                            ("Filters", "gas = co2e_100yr, country_name IS NOT NULL"),
-                        ]
-                        start = len(metadata) + 1
-                        df_raw.to_excel(writer, sheet_name="All Raw Data", startrow=start, index=False)
-                        write_metadata(writer.sheets["All Raw Data"], metadata)
+                            if not df_em.empty:
+                                df_ts = df_em[["year_month", "emissions_quantity"]].copy()
 
-                output.seek(0)
+                                # Add asset emissions as a separate column
+                                if not df_asset.empty:
+                                    df_asset_merge = df_asset[["year_month", "emissions_quantity"]].rename(
+                                        columns={"emissions_quantity": "asset_emissions_quantity"}
+                                    )
+                                    df_ts = df_ts.merge(df_asset_merge, on="year_month", how="left")
+
+                                    # Only include activity/EF when a subsector is selected
+                                    if data_dict["selected_subsector_dd"] != "All Subsectors":
+                                        df_act_ef = df_asset[["year_month", "activity", "mean_emissions_factor"]]
+                                        df_ts = df_ts.merge(df_act_ef, on="year_month", how="left")
+
+                                df_ts.to_excel(writer, sheet_name="Monthly Time Series", startrow=start, index=False)
+                                write_metadata(writer.sheets["Monthly Time Series"], ts_meta)
+
+                        if selections["raw"]:
+                            raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+                            rc = data_dict["region_condition"]
+                            if rc:
+                                if isinstance(rc["column_value"], bool):
+                                    raw_where.append(f"{rc['column_name']} = {str(rc['column_value']).upper()}")
+                                else:
+                                    raw_where.append(f"{rc['column_name']} = '{rc['column_value']}'")
+                            raw_where_clause = " AND ".join(raw_where)
+
+                            raw_con = duckdb.connect()
+                            df_raw = raw_con.execute(
+                                f"SELECT * FROM '{data_dict['stats_path']}' WHERE {raw_where_clause}"
+                            ).df()
+                            raw_con.close()
+
+                            metadata = [
+                                ("Region", data_dict["selected_scope"]),
+                                ("Filters", "gas = co2e_100yr, country_name IS NOT NULL"),
+                            ]
+                            start = len(metadata) + 1
+                            df_raw.to_excel(writer, sheet_name="Raw Statistics", startrow=start, index=False)
+                            write_metadata(writer.sheets["Raw Statistics"], metadata)
+
+                    buf.seek(0)
+                    return buf.getvalue()
+
+                sels = {
+                    "sector": dl_sector,
+                    "country": dl_country,
+                    "rankings": dl_rankings_cb,
+                    "timeseries": dl_timeseries,
+                    "raw": dl_raw,
+                }
+
+                excel_bytes = _build_excel(data, sels)
 
                 st.download_button(
-                    label="Download",
-                    data=output.getvalue(),  # bytes is safest
+                    label="Download Data",
+                    data=excel_bytes,
                     file_name="emissions_data.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     icon=":material/download:",
+                    use_container_width=True,
                 )
 
         st.markdown("</div>", unsafe_allow_html=True)  # end dl-wrap
