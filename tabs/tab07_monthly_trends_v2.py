@@ -1850,7 +1850,7 @@ def show_monthly_trends_v2():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### Monthly Time Series: " + selected_scope)
 
-    with st.expander("**Explore " + selected_scope + " monthly emissions, activity, and emissions factor trends. Drill down by country, sector, and subsector**", expanded=False):
+    with st.expander("**Explore monthly emissions, activity, and emissions factor trends. Drill down by country, sector, and subsector**", expanded=False):
 
         # Get list of countries from the actual data table (avoids name mismatches with gadm_0)
         ts_country_base_filter = "country_name IS NOT NULL AND gas = 'co2e_100yr'"
