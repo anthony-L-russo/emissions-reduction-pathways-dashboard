@@ -70,15 +70,21 @@ def show_monthly_trends_v2():
     #     </style>
     #     """, unsafe_allow_html=True)
 
+    # Get column names for inventory year detection (region-independent)
+    _col_check = con.execute(f"SELECT * FROM '{country_subsector_stats_path}' LIMIT 0").df()
+    _all_stats_columns = _col_check.columns.tolist()
+
     # Create columns for Change View toggle and Region dropdown
     col_view, col_region, col_month = st.columns([3, 1.6, 3])
 
     with col_view:
         trend_view = st.segmented_control(
             label="Change Time Period",
-            options=["Month YoY", "Year-to-Date YoY", "Month-over-Month"],
+            options=["Month YoY", "Year-to-Date YoY", "Month-over-Month", "Total Inventory"],
             default="Month YoY",
         )
+
+    is_inventory_view = (trend_view == "Total Inventory")
 
     with col_region:
         # Pull the entire region block up
@@ -106,20 +112,43 @@ def show_monthly_trends_v2():
         region_condition = map_region_condition(selected_scope, {})
 
     with col_month:
-        if max_date:
-            formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+        if is_inventory_view:
+            # Detect available inventory years from YYYY_total_emissions columns
+            inventory_year_cols = [c for c in _all_stats_columns if c.endswith('_total_emissions') and c[0].isdigit()]
+            available_inventory_years = sorted([int(c.split('_')[0]) for c in inventory_year_cols], reverse=True)
 
-            st.markdown(
-                f"""
-                <div style="display:flex; justify-content:flex-end; margin-top: 4px;">
-                    <div style="text-align:right;">
-                        <div style="font-size:0.85rem; color:#6b7280;">Latest Month</div>
-                        <div style="font-size:1.0rem; font-weight:600;">{formatted_date}</div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            inventory_year = st.selectbox(
+                label="Inventory Year",
+                options=available_inventory_years,
+                key="inventory_year_selector",
             )
+
+            latest_full_inventory_year = CONFIG['latest_full_inventory_year']
+            is_full_year = (inventory_year <= latest_full_inventory_year)
+
+            # Column names for selected year and comparison year
+            inv_current_col = f"{inventory_year}_total_emissions"
+            inv_previous_col = f"{inventory_year - 1}_total_emissions"
+        else:
+            inventory_year = None
+            is_full_year = None
+            inv_current_col = None
+            inv_previous_col = None
+
+            if max_date:
+                formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+
+                st.markdown(
+                    f"""
+                    <div style="display:flex; justify-content:flex-end; margin-top: 4px;">
+                        <div style="text-align:right;">
+                            <div style="font-size:0.85rem; color:#6b7280;">Latest Month</div>
+                            <div style="font-size:1.0rem; font-weight:600;">{formatted_date}</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     
 
@@ -269,6 +298,62 @@ def show_monthly_trends_v2():
         absolute_change = global_latest - global_previous
         percent_change = (absolute_change / global_previous * 100) if global_previous != 0 else 0
 
+    elif is_inventory_view:
+        # Total Inventory: compare selected year vs previous year
+        if is_full_year:
+            inv_global_query = f"""
+                SELECT
+                    SUM("{inv_current_col}") as latest,
+                    SUM("{inv_previous_col}") as previous
+                FROM '{country_subsector_stats_path}'
+                WHERE {where_clause}
+            """
+            df_inv_global = con.execute(inv_global_query).df()
+            global_latest = df_inv_global['latest'].iloc[0] or 0
+            global_previous = df_inv_global['previous'].iloc[0] or 0
+        else:
+            # Partial year: use YTD columns if available, else fallback to totals table
+            inv_ytd_cur_col = f"year_to_date_{inventory_year}_emissions"
+            inv_ytd_prev_col = f"year_to_date_{inventory_year - 1}_emissions"
+            if inv_ytd_cur_col in _all_stats_columns and inv_ytd_prev_col in _all_stats_columns:
+                inv_global_query = f"""
+                    SELECT
+                        SUM("{inv_ytd_cur_col}") as latest,
+                        SUM("{inv_ytd_prev_col}") as previous
+                    FROM '{country_subsector_stats_path}'
+                    WHERE {where_clause}
+                """
+                df_inv_global = con.execute(inv_global_query).df()
+                global_latest = df_inv_global['latest'].iloc[0] or 0
+                global_previous = df_inv_global['previous'].iloc[0] or 0
+            else:
+                # Fallback: use totals table with cumulative sum (same as YTD YoY)
+                ytd_global_where_clauses = [
+                    "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+                    f"year IN ({inventory_year - 1}, {inventory_year})",
+                    f"month <= {latest_month}"
+                ]
+                if region_condition:
+                    rc_col = region_condition['column_name']
+                    rc_val = region_condition['column_value']
+                    if isinstance(rc_val, bool):
+                        ytd_global_where_clauses.append(f"{rc_col} = {str(rc_val).upper()}")
+                    else:
+                        ytd_global_where_clauses.append(f"{rc_col} = '{rc_val}'")
+                ytd_global_where_clause = " AND ".join(ytd_global_where_clauses)
+                df_ytd = con.execute(f"""
+                    SELECT year, month, SUM(emissions_quantity) AS emissions_quantity
+                    FROM '{country_subsector_totals_path}'
+                    WHERE {ytd_global_where_clause}
+                    GROUP BY year, month ORDER BY year, month
+                """).df()
+                df_ytd['cumulative'] = df_ytd.groupby('year')['emissions_quantity'].cumsum()
+                global_latest = df_ytd[(df_ytd['year'] == inventory_year) & (df_ytd['month'] == latest_month)]['cumulative'].sum()
+                global_previous = df_ytd[(df_ytd['year'] == inventory_year - 1) & (df_ytd['month'] == latest_month)]['cumulative'].sum()
+
+        absolute_change = global_latest - global_previous
+        percent_change = (absolute_change / global_previous * 100) if global_previous != 0 else 0
+
     else:  # MoM
         # Query DuckDB directly for aggregated data instead of loading all data
         global_totals_query = f"""
@@ -315,6 +400,15 @@ def show_monthly_trends_v2():
         card1_label = "Year-to-Date YoY Change"
         card1_current_label = f"YTD {latest_year}"
         card1_previous_label = f"YTD {latest_year - 1}"
+    elif is_inventory_view:
+        if is_full_year:
+            card1_label = f"{inventory_year} vs {inventory_year - 1} Inventory Change"
+            card1_current_label = str(inventory_year)
+            card1_previous_label = str(inventory_year - 1)
+        else:
+            card1_label = f"YTD {inventory_year} vs {inventory_year - 1} Inventory Change"
+            card1_current_label = f"YTD {inventory_year}"
+            card1_previous_label = f"YTD {inventory_year - 1}"
     else:  # Month-over-Month
         card1_label = "Month-over-Month Change"
         import calendar
@@ -386,6 +480,42 @@ def show_monthly_trends_v2():
 
         df_country_totals = df_current.merge(df_previous, on='country_name', how='outer').fillna(0)
         df_country_totals['change'] = df_country_totals['current_ytd'] - df_country_totals['previous_ytd']
+    elif is_inventory_view:
+        if is_full_year:
+            df_country_totals = con.execute(f"""
+                SELECT country_name,
+                    SUM("{inv_current_col}") as current_ytd,
+                    SUM("{inv_previous_col}") as previous_ytd,
+                    SUM("{inv_current_col}") - SUM("{inv_previous_col}") as change
+                FROM '{country_subsector_stats_path}'
+                WHERE {where_clause} AND country_name <> 'Unknown'
+                GROUP BY country_name
+            """).df()
+        else:
+            # Partial year: same as YTD YoY but using inventory_year
+            inv_ctry_where = [
+                "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+                f"year IN ({inventory_year - 1}, {inventory_year})",
+                f"month <= {latest_month}"
+            ]
+            if region_condition:
+                rc_col = region_condition['column_name']
+                rc_val = region_condition['column_value']
+                if isinstance(rc_val, bool):
+                    inv_ctry_where.append(f"{rc_col} = {str(rc_val).upper()}")
+                else:
+                    inv_ctry_where.append(f"{rc_col} = '{rc_val}'")
+            df_ctry_ytd = con.execute(f"""
+                SELECT country_name, year, month, SUM(emissions_quantity) AS emissions_quantity
+                FROM '{country_subsector_totals_path}'
+                WHERE {" AND ".join(inv_ctry_where)} AND country_name <> 'Unknown'
+                GROUP BY country_name, year, month ORDER BY country_name, year, month
+            """).df()
+            df_ctry_ytd['cumulative'] = df_ctry_ytd.groupby(['country_name', 'year'])['emissions_quantity'].cumsum()
+            df_cur = df_ctry_ytd[(df_ctry_ytd['year'] == inventory_year) & (df_ctry_ytd['month'] == latest_month)][['country_name', 'cumulative']].rename(columns={'cumulative': 'current_ytd'})
+            df_prev = df_ctry_ytd[(df_ctry_ytd['year'] == inventory_year - 1) & (df_ctry_ytd['month'] == latest_month)][['country_name', 'cumulative']].rename(columns={'cumulative': 'previous_ytd'})
+            df_country_totals = df_cur.merge(df_prev, on='country_name', how='outer').fillna(0)
+            df_country_totals['change'] = df_country_totals['current_ytd'] - df_country_totals['previous_ytd']
     else:
         # Query DuckDB directly for aggregated data instead of pandas groupby
         change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -420,8 +550,8 @@ def show_monthly_trends_v2():
     largest_decrease_value = largest_decrease['change']
 
     # Calculate percent change for largest decrease country
-    if trend_view == "Year-to-Date YoY":
-        # For YTD, get cumulative values from the country totals we just calculated
+    if trend_view == "Year-to-Date YoY" or is_inventory_view:
+        # For YTD/inventory, get values from the country totals we just calculated
         country_row = df_country_totals[df_country_totals['country_name'] == largest_decrease_country]
         if not country_row.empty:
             previous_total = country_row['previous_ytd'].iloc[0]
@@ -448,8 +578,10 @@ def show_monthly_trends_v2():
     largest_decrease_percent = (largest_decrease_value / previous_total * 100) if previous_total != 0 else 0
 
     # Find the subsector driving the decrease for this country
-    if trend_view == "Year-to-Date YoY":
+    if trend_view == "Year-to-Date YoY" or (is_inventory_view and not is_full_year):
         # Query subsector-level YTD data for this specific country
+        _yr_cur = inventory_year if is_inventory_view else latest_year
+        _yr_prev = _yr_cur - 1
         subsector_ytd_query = f"""
             SELECT
                 subsector,
@@ -459,7 +591,7 @@ def show_monthly_trends_v2():
             FROM '{country_subsector_totals_path}'
             WHERE gas = 'co2e_100yr'
                 AND country_name = '{largest_decrease_country}'
-                AND year IN ({latest_year - 1}, {latest_year})
+                AND year IN ({_yr_prev}, {_yr_cur})
                 AND month <= {latest_month}
                 and subsector <> 'non-broadcasting-vessels'
             GROUP BY subsector, year, month
@@ -467,22 +599,33 @@ def show_monthly_trends_v2():
         """
         df_subsector_ytd = con.execute(subsector_ytd_query).df()
 
-        # Calculate cumulative emissions per subsector per year
         df_subsector_ytd['cumulative'] = df_subsector_ytd.groupby(['subsector', 'year'])['emissions_quantity'].cumsum()
 
-        # Get the latest month's cumulative value for each subsector for each year
         df_current_sub = df_subsector_ytd[
-            (df_subsector_ytd['year'] == latest_year) & (df_subsector_ytd['month'] == latest_month)
+            (df_subsector_ytd['year'] == _yr_cur) & (df_subsector_ytd['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'current_ytd'})
 
         df_previous_sub = df_subsector_ytd[
-            (df_subsector_ytd['year'] == latest_year - 1) & (df_subsector_ytd['month'] == latest_month)
+            (df_subsector_ytd['year'] == _yr_prev) & (df_subsector_ytd['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'previous_ytd'})
 
         df_subsector_change = df_current_sub.merge(df_previous_sub, on='subsector', how='outer').fillna(0)
         df_subsector_change['change'] = df_subsector_change['current_ytd'] - df_subsector_change['previous_ytd']
 
         driving_subsector_decrease = df_subsector_change.loc[df_subsector_change['change'].idxmin()]
+        subsector_decrease_name = driving_subsector_decrease['subsector']
+    elif is_inventory_view and is_full_year:
+        # Full year inventory: query stats file for subsector changes
+        df_sub_dec = con.execute(f"""
+            SELECT subsector,
+                SUM("{inv_current_col}") - SUM("{inv_previous_col}") as change
+            FROM '{country_subsector_stats_path}'
+            WHERE {where_clause}
+                AND country_name = '{largest_decrease_country}'
+                AND subsector <> 'non-broadcasting-vessels'
+            GROUP BY subsector
+        """).df()
+        driving_subsector_decrease = df_sub_dec.loc[df_sub_dec['change'].idxmin()]
         subsector_decrease_name = driving_subsector_decrease['subsector']
     else:
         # Query DuckDB for this specific country's subsector data
@@ -508,8 +651,7 @@ def show_monthly_trends_v2():
     largest_increase_value = largest_increase['change']
 
     # Calculate percent change for largest increase country
-    if trend_view == "Year-to-Date YoY":
-        # For YTD, get cumulative values from the country totals we just calculated
+    if trend_view == "Year-to-Date YoY" or is_inventory_view:
         country_row_inc = df_country_totals[df_country_totals['country_name'] == largest_increase_country]
         if not country_row_inc.empty:
             previous_total_inc = country_row_inc['previous_ytd'].iloc[0]
@@ -536,8 +678,9 @@ def show_monthly_trends_v2():
     largest_increase_percent = (largest_increase_value / previous_total_inc * 100) if previous_total_inc != 0 else 0
 
     # Find the subsector driving the increase for this country
-    if trend_view == "Year-to-Date YoY":
-        # Query subsector-level YTD data for this specific country
+    if trend_view == "Year-to-Date YoY" or (is_inventory_view and not is_full_year):
+        _yr_cur_inc = inventory_year if is_inventory_view else latest_year
+        _yr_prev_inc = _yr_cur_inc - 1
         subsector_ytd_query_inc = f"""
             SELECT
                 subsector,
@@ -547,7 +690,7 @@ def show_monthly_trends_v2():
             FROM '{country_subsector_totals_path}'
             WHERE gas = 'co2e_100yr'
                 AND country_name = '{largest_increase_country}'
-                AND year IN ({latest_year - 1}, {latest_year})
+                AND year IN ({_yr_prev_inc}, {_yr_cur_inc})
                 AND month <= {latest_month}
             GROUP BY subsector, year, month
             ORDER BY subsector, year, month
@@ -559,17 +702,28 @@ def show_monthly_trends_v2():
 
         # Get the latest month's cumulative value for each subsector for each year
         df_current_sub_inc = df_subsector_ytd_inc[
-            (df_subsector_ytd_inc['year'] == latest_year) & (df_subsector_ytd_inc['month'] == latest_month)
+            (df_subsector_ytd_inc['year'] == _yr_cur_inc) & (df_subsector_ytd_inc['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'current_ytd'})
 
         df_previous_sub_inc = df_subsector_ytd_inc[
-            (df_subsector_ytd_inc['year'] == latest_year - 1) & (df_subsector_ytd_inc['month'] == latest_month)
+            (df_subsector_ytd_inc['year'] == _yr_prev_inc) & (df_subsector_ytd_inc['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'previous_ytd'})
 
         df_subsector_change_inc = df_current_sub_inc.merge(df_previous_sub_inc, on='subsector', how='outer').fillna(0)
         df_subsector_change_inc['change'] = df_subsector_change_inc['current_ytd'] - df_subsector_change_inc['previous_ytd']
 
         driving_subsector_increase = df_subsector_change_inc.loc[df_subsector_change_inc['change'].idxmax()]
+        subsector_increase_name = driving_subsector_increase['subsector']
+    elif is_inventory_view and is_full_year:
+        df_sub_inc = con.execute(f"""
+            SELECT subsector,
+                SUM("{inv_current_col}") - SUM("{inv_previous_col}") as change
+            FROM '{country_subsector_stats_path}'
+            WHERE {where_clause}
+                AND country_name = '{largest_increase_country}'
+            GROUP BY subsector
+        """).df()
+        driving_subsector_increase = df_sub_inc.loc[df_sub_inc['change'].idxmax()]
         subsector_increase_name = driving_subsector_increase['subsector']
     else:
         # Query DuckDB for this specific country's subsector data
@@ -589,12 +743,13 @@ def show_monthly_trends_v2():
         subsector_increase_name = driving_subsector_increase['subsector']
 
     # Card 4: Biggest Sector Move
-    if trend_view == "Year-to-Date YoY":
+    if trend_view == "Year-to-Date YoY" or (is_inventory_view and not is_full_year):
+        _sec_yr = inventory_year if is_inventory_view else latest_year
         # Build WHERE clause with region filter
         sector_card_ytd_where_clauses = [
             "gas = 'co2e_100yr'",
             "country_name IS NOT NULL",
-            f"year IN ({latest_year - 1}, {latest_year})",
+            f"year IN ({_sec_yr - 1}, {_sec_yr})",
             f"month <= {latest_month}"
         ]
 
@@ -627,15 +782,25 @@ def show_monthly_trends_v2():
 
         # Get the latest month's cumulative value for each sector for each year
         df_current_sec = df_sector_ytd_raw[
-            (df_sector_ytd_raw['year'] == latest_year) & (df_sector_ytd_raw['month'] == latest_month)
+            (df_sector_ytd_raw['year'] == _sec_yr) & (df_sector_ytd_raw['month'] == latest_month)
         ][['sector', 'cumulative']].rename(columns={'cumulative': 'current'})
 
         df_previous_sec = df_sector_ytd_raw[
-            (df_sector_ytd_raw['year'] == latest_year - 1) & (df_sector_ytd_raw['month'] == latest_month)
+            (df_sector_ytd_raw['year'] == _sec_yr - 1) & (df_sector_ytd_raw['month'] == latest_month)
         ][['sector', 'cumulative']].rename(columns={'cumulative': 'previous'})
 
         df_sector_totals = df_current_sec.merge(df_previous_sec, on='sector', how='outer').fillna(0)
         df_sector_totals['change'] = df_sector_totals['current'] - df_sector_totals['previous']
+    elif is_inventory_view and is_full_year:
+        df_sector_totals = con.execute(f"""
+            SELECT sector,
+                SUM("{inv_current_col}") as current,
+                SUM("{inv_previous_col}") as previous,
+                SUM("{inv_current_col}") - SUM("{inv_previous_col}") as change
+            FROM '{country_subsector_stats_path}'
+            WHERE {where_clause}
+            GROUP BY sector
+        """).df()
     else:
         # Query DuckDB directly for aggregated data
         change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -679,12 +844,12 @@ def show_monthly_trends_v2():
     biggest_sector_percent = (biggest_sector_value / biggest_sector_previous * 100) if biggest_sector_previous != 0 else 0
 
     # Card 5: Biggest Subsector Move
-    if trend_view == "Year-to-Date YoY":
-        # Build WHERE clause with region filter
+    if trend_view == "Year-to-Date YoY" or (is_inventory_view and not is_full_year):
+        _sub_yr = inventory_year if is_inventory_view else latest_year
         subsector_card_ytd_where_clauses = [
             "gas = 'co2e_100yr'",
             "country_name IS NOT NULL",
-            f"year IN ({latest_year - 1}, {latest_year})",
+            f"year IN ({_sub_yr - 1}, {_sub_yr})",
             f"month <= {latest_month}"
         ]
 
@@ -718,15 +883,25 @@ def show_monthly_trends_v2():
 
         # Get the latest month's cumulative value for each subsector for each year
         df_current_subsec = df_subsector_ytd_raw[
-            (df_subsector_ytd_raw['year'] == latest_year) & (df_subsector_ytd_raw['month'] == latest_month)
+            (df_subsector_ytd_raw['year'] == _sub_yr) & (df_subsector_ytd_raw['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'current'})
 
         df_previous_subsec = df_subsector_ytd_raw[
-            (df_subsector_ytd_raw['year'] == latest_year - 1) & (df_subsector_ytd_raw['month'] == latest_month)
+            (df_subsector_ytd_raw['year'] == _sub_yr - 1) & (df_subsector_ytd_raw['month'] == latest_month)
         ][['subsector', 'cumulative']].rename(columns={'cumulative': 'previous'})
 
         df_subsector_totals = df_current_subsec.merge(df_previous_subsec, on='subsector', how='outer').fillna(0)
         df_subsector_totals['change'] = df_subsector_totals['current'] - df_subsector_totals['previous']
+    elif is_inventory_view and is_full_year:
+        df_subsector_totals = con.execute(f"""
+            SELECT subsector,
+                SUM("{inv_current_col}") as current,
+                SUM("{inv_previous_col}") as previous,
+                SUM("{inv_current_col}") - SUM("{inv_previous_col}") as change
+            FROM '{country_subsector_stats_path}'
+            WHERE {where_clause} AND subsector <> 'non-broadcasting-vessels'
+            GROUP BY subsector
+        """).df()
     else:
         # Query DuckDB directly for aggregated data
         change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -867,17 +1042,21 @@ def show_monthly_trends_v2():
 
     # ==================== Sector Movers Visualization ====================
     with viz_col1:
-        st.markdown("#### Sector Movers")
+        st.markdown("#### " + ("Sector Inventory" if is_inventory_view else "Sector Movers"))
 
         # Add Sector Movers breakout toggle with label to the left
+        sector_breakout_options = (
+            ["Total Inventory", "Subsector", "Global North/South"] if is_inventory_view
+            else ["Total Net Change", "Subsector", "Global North/South"]
+        )
         label_col, toggle_col = st.columns([0.8, 3.2], gap="small")
         with label_col:
             st.markdown("<div style='padding-top: 8px; font-size: 0.9em; font-weight: 500;'>Breakdown Sector by:</div>", unsafe_allow_html=True)
         with toggle_col:
             sector_breakout = st.segmented_control(
                 "Sector Movers Breakout",
-                options=["Total Net Change", "Subsector", "Global North/South"],
-                default="Total Net Change",
+                options=sector_breakout_options,
+                default=sector_breakout_options[0],
                 key="sector_movers_breakout",
                 label_visibility="collapsed"
             )
