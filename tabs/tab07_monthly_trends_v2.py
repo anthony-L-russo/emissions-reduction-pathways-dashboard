@@ -115,13 +115,15 @@ def show_monthly_trends_v2():
         if is_inventory_view:
             # Detect available inventory years from YYYY_total_emissions columns
             inventory_year_cols = [c for c in _all_stats_columns if c.endswith('_total_emissions') and c[0].isdigit()]
-            available_inventory_years = sorted([int(c.split('_')[0]) for c in inventory_year_cols], reverse=True)
+            available_inventory_years = sorted([y for y in [int(c.split('_')[0]) for c in inventory_year_cols] if y >= 2022], reverse=True)
 
-            inventory_year = st.selectbox(
-                label="Inventory Year",
-                options=available_inventory_years,
-                key="inventory_year_selector",
-            )
+            inv_col_select, inv_col_month = st.columns([1, 1.5])
+            with inv_col_select:
+                inventory_year = st.selectbox(
+                    label="Inventory Year",
+                    options=available_inventory_years,
+                    key="inventory_year_selector",
+                )
 
             latest_full_inventory_year = CONFIG['latest_full_inventory_year']
             is_full_year = (inventory_year <= latest_full_inventory_year)
@@ -129,6 +131,21 @@ def show_monthly_trends_v2():
             # Column names for selected year and comparison year
             inv_current_col = f"{inventory_year}_total_emissions"
             inv_previous_col = f"{inventory_year - 1}_total_emissions"
+
+            with inv_col_month:
+                if max_date:
+                    formatted_date = pd.to_datetime(max_date).strftime("%B %Y")
+                    st.markdown(
+                        f"""
+                        <div style="display:flex; justify-content:flex-end; margin-top: 4px;">
+                            <div style="text-align:right;">
+                                <div style="font-size:0.85rem; color:#6b7280;">Latest Month</div>
+                                <div style="font-size:1.0rem; font-weight:600;">{formatted_date}</div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
         else:
             inventory_year = None
             is_full_year = None
@@ -1045,10 +1062,7 @@ def show_monthly_trends_v2():
         st.markdown("#### " + ("Sector Inventory" if is_inventory_view else "Sector Movers"))
 
         # Add Sector Movers breakout toggle with label to the left
-        sector_breakout_options = (
-            ["Total Inventory", "Subsector", "Global North/South"] if is_inventory_view
-            else ["Total Net Change", "Subsector", "Global North/South"]
-        )
+        sector_breakout_options = ["Total", "Subsector", "Global North/South"]
         label_col, toggle_col = st.columns([0.8, 3.2], gap="small")
         with label_col:
             st.markdown("<div style='padding-top: 8px; font-size: 0.9em; font-weight: 500;'>Breakdown Sector by:</div>", unsafe_allow_html=True)
@@ -1110,6 +1124,18 @@ def show_monthly_trends_v2():
 
             df_sector_movers = df_current_ss.merge(df_previous_ss, on=['sector', 'subsector'], how='outer').fillna(0)
             df_sector_movers['change'] = df_sector_movers['current_ytd'] - df_sector_movers['previous_ytd']
+        elif is_inventory_view:
+            # Inventory view: query total emissions for the selected year
+            sector_inv_query = f"""
+                SELECT
+                    sector,
+                    subsector,
+                    SUM("{inv_current_col}") as change
+                FROM '{country_subsector_stats_path}'
+                WHERE {where_clause}
+                GROUP BY sector, subsector
+            """
+            df_sector_movers = con.execute(sector_inv_query).df()
         else:
             # Query DuckDB directly for aggregated data instead of pandas groupby
             change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -1168,10 +1194,10 @@ def show_monthly_trends_v2():
         df_sector_viz = pd.DataFrame(sector_data)
 
         # Apply breakout transformations based on selected view
-        if sector_breakout == "Total Net Change":
+        if sector_breakout == sector_breakout_options[0]:
             # Aggregate to sector level only (no subsector breakout)
             df_sector_viz = df_sector_movers.groupby('sector')['change'].sum().reset_index()
-            df_sector_viz['subsector'] = 'Net Change'  # Placeholder for compatibility
+            df_sector_viz['subsector'] = 'Total Inventory' if is_inventory_view else 'Net Change'
         elif sector_breakout == "Global North/South":
             # Query with developed_un to classify by Global North/South
             # Re-query with global classification
@@ -1202,6 +1228,18 @@ def show_monthly_trends_v2():
                 df_sector_viz = df_current_global.merge(df_previous_global, on=['sector', 'global_classification'], how='outer').fillna(0)
                 df_sector_viz['change'] = df_sector_viz['current_ytd'] - df_sector_viz['previous_ytd']
                 df_sector_viz = df_sector_viz.rename(columns={'global_classification': 'subsector'})  # Rename for compatibility
+            elif is_inventory_view:
+                global_inv_query = f"""
+                    SELECT
+                        sector,
+                        CASE WHEN developed_un = TRUE THEN 'Global North' ELSE 'Global South' END AS global_classification,
+                        SUM("{inv_current_col}") as change
+                    FROM '{country_subsector_stats_path}'
+                    WHERE {where_clause}
+                    GROUP BY sector, global_classification
+                """
+                df_sector_viz = con.execute(global_inv_query).df()
+                df_sector_viz = df_sector_viz.rename(columns={'global_classification': 'subsector'})
             else:
                 change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
                 global_query = f"""
@@ -1216,168 +1254,238 @@ def show_monthly_trends_v2():
                 df_sector_viz = con.execute(global_query).df()
                 df_sector_viz = df_sector_viz.rename(columns={'global_classification': 'subsector'})  # Rename for compatibility
 
-        # Create horizontal stacked bar chart for sectors
+        # Build sector chart
         fig_sector_movers = go.Figure()
 
-        # Get unique sectors and sort by absolute change (highest to lowest)
+        # Get unique sectors and sort by total (highest to lowest)
         sector_totals = df_sector_viz.groupby('sector')['change'].sum()
         sector_abs_totals = sector_totals.abs().sort_values(ascending=False)
         sectors_sorted = sector_abs_totals.index.tolist()
 
-        # Reverse for Plotly (which displays bottom to top for horizontal bars)
-        sectors_sorted_reversed = sectors_sorted[::-1]
+        if is_inventory_view:
+            # ---- INVENTORY VIEW: vertical bars (sectors on X-axis) ----
+            # Sort sectors by total inventory (highest to lowest, left to right)
+            sectors_sorted_inv = sector_totals.sort_values(ascending=False).index.tolist()
 
-        # For each sector, add traces based on breakout view
-        if sector_breakout == "Total Net Change":
-            # Simple bars with sector colors, no breakout
-            for sector in sectors_sorted_reversed:
-                df_sec = df_sector_viz[df_sector_viz['sector'] == sector]
-                if not df_sec.empty:
-                    value = df_sec['change'].iloc[0]
+            if sector_breakout == sector_breakout_options[0]:
+                # Simple bars with sector colors
+                for sector in sectors_sorted_inv:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector]
+                    if not df_sec.empty:
+                        value = df_sec['change'].iloc[0]
+                        base_color = sector_color_map.get(sector, "#999999")
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=sector,
+                            x=[sector],
+                            y=[value],
+                            marker_color=base_color,
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"Total: %{{y:,.0f}}<extra></extra>"
+                        ))
+            elif sector_breakout == "Global North/South":
+                for sector in sectors_sorted_inv:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
+                    df_sec['sort_order'] = df_sec['subsector'].map({'Global North': 0, 'Global South': 1})
+                    df_sec = df_sec.sort_values('sort_order')
                     base_color = sector_color_map.get(sector, "#999999")
-
-                    fig_sector_movers.add_trace(go.Bar(
-                        name=sector,
-                        y=[sector],
-                        x=[value],
-                        orientation='h',
-                        marker_color=base_color,
-                        showlegend=False,
-                        hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
-                                      f"Net Change: %{{x:,.0f}}<extra></extra>"
-                    ))
-        elif sector_breakout == "Global North/South":
-            # Global North/South view - use shades of sector color
-            for sector in sectors_sorted_reversed:
-                df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
-
-                # Sort by Global North first, then Global South
-                df_sec['sort_order'] = df_sec['subsector'].map({'Global North': 0, 'Global South': 1})
-                df_sec = df_sec.sort_values('sort_order')
-
-                # Create color shades for this sector (2 shades: Global North and Global South)
-                base_color = sector_color_map.get(sector, "#999999")
-                classifications = df_sec['subsector'].tolist()
-                shades = create_color_shades(base_color, len(classifications))
-
-                # Add traces
-                for i, (_, row) in enumerate(df_sec.iterrows()):
-                    classification = row['subsector']
-                    value = row['change']
-
-                    fig_sector_movers.add_trace(go.Bar(
-                        name=f"{sector}: {classification}",
-                        y=[sector],
-                        x=[value],
-                        orientation='h',
-                        marker_color=shades[i],
-                        showlegend=False,
-                        hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
-                                      f"{classification}: %{{x:,.0f}}<extra></extra>"
-                    ))
-        else:
-            # Subsector view (default) - stacked bars with shades
-            for sector in sectors_sorted_reversed:
-                df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
-
-                # Sort subsectors by absolute change (largest first) so largest is at base
-                df_sec['abs_change'] = df_sec['change'].abs()
-                df_sec = df_sec.sort_values('abs_change', ascending=False)
-
-                # Create color shades for this sector's subsectors
-                base_color = sector_color_map.get(sector, "#999999")
-                subsectors_list = df_sec['subsector'].tolist()
-                shades = create_color_shades(base_color, len(subsectors_list))
-
-                # Add traces in order (largest first = base)
-                for i, (_, row) in enumerate(df_sec.iterrows()):
-                    subsector = row['subsector']
-                    value = row['change']
-
-                    fig_sector_movers.add_trace(go.Bar(
-                        name=f"{sector}: {subsector}",
-                        y=[sector],
-                        x=[value],
-                        orientation='h',
-                        marker_color=shades[i],
-                        showlegend=False,
-                        hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
-                                      f"{subsector.replace('-', ' ').title()}: %{{x:,.0f}}<extra></extra>"
-                    ))
-
-        fig_sector_movers.update_layout(
-            barmode='relative',  # Use 'relative' so positive/negative subsectors stack properly
-            xaxis_title='Emissions Change (tCO₂e)',
-            yaxis_title='Sector',
-            height=640,
-            showlegend=False,
-            margin=dict(l=150, r=80, t=30, b=50),
-            yaxis=dict(
-                categoryorder='array',
-                categoryarray=sectors_sorted_reversed  # Explicitly order Y-axis from bottom to top
-            )
-        )
-
-        # Add thick vertical line at x=0 (gray works in both light and dark mode)
-        fig_sector_movers.add_vline(x=0, line_width=3, line_color="#666666", opacity=0.9)
-
-        # Add net change labels for each sector
-        for sector in sectors_sorted:
-            net_change = sector_totals[sector]
-
-            # Get the subsector data for this sector to find bar extents
-            df_sec_labels = df_sector_viz[df_sector_viz['sector'] == sector]
-            positive_extent = df_sec_labels[df_sec_labels['change'] > 0]['change'].sum()
-            negative_extent = df_sec_labels[df_sec_labels['change'] < 0]['change'].sum()
-
-            # Handle zero case specially
-            if abs(net_change) < 0.5:  # Essentially zero
-                arrow = ""
-                color = "white"
-                text = "0"
-                x_pos = 0
-                x_anchor = "left"
-                xshift = 10
+                    shades = create_color_shades(base_color, len(df_sec))
+                    for i, (_, row) in enumerate(df_sec.iterrows()):
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=f"{sector}: {row['subsector']}",
+                            x=[sector],
+                            y=[row['change']],
+                            marker_color=shades[i],
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"{row['subsector']}: %{{y:,.0f}}<extra></extra>"
+                        ))
             else:
-                arrow = "↑" if net_change > 0 else "↓"
-                color = "red" if net_change > 0 else "green"
-                text = f"{arrow} {format_number_short(abs(net_change))}"
+                # Subsector breakout
+                for sector in sectors_sorted_inv:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
+                    df_sec = df_sec.sort_values('change', ascending=False)
+                    base_color = sector_color_map.get(sector, "#999999")
+                    shades = create_color_shades(base_color, len(df_sec))
+                    for i, (_, row) in enumerate(df_sec.iterrows()):
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=f"{sector}: {row['subsector']}",
+                            x=[sector],
+                            y=[row['change']],
+                            marker_color=shades[i],
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"{row['subsector'].replace('-', ' ').title()}: %{{y:,.0f}}<extra></extra>"
+                        ))
 
-                # Position label at the furthest extent of bars, not at net change
-                if net_change > 0:
-                    x_pos = positive_extent  # Furthest positive extent
+            fig_sector_movers.update_layout(
+                barmode='stack',
+                yaxis_title='Total Emissions (tCO₂e)',
+                height=640,
+                showlegend=False,
+                margin=dict(l=80, r=80, t=30, b=120),
+                xaxis=dict(
+                    categoryorder='array',
+                    categoryarray=sectors_sorted_inv,
+                    tickangle=-45,
+                    rangeslider=dict(visible=True, thickness=0.04),
+                    type="category"
+                )
+            )
+
+            # Add inventory value labels above each bar (red, no arrows)
+            for sector in sectors_sorted_inv:
+                total_val = sector_totals[sector]
+                df_sec_labels = df_sector_viz[df_sector_viz['sector'] == sector]
+                bar_top = df_sec_labels[df_sec_labels['change'] > 0]['change'].sum()
+
+                fig_sector_movers.add_annotation(
+                    x=sector,
+                    y=bar_top,
+                    text=format_number_short(abs(total_val)),
+                    showarrow=False,
+                    font=dict(size=13, color="red", family="Arial"),
+                    yanchor="bottom",
+                    yshift=10
+                )
+
+        else:
+            # ---- CHANGE VIEWS: horizontal bars (sectors on Y-axis) ----
+            # Reverse for Plotly (which displays bottom to top for horizontal bars)
+            sectors_sorted_reversed = sectors_sorted[::-1]
+
+            if sector_breakout == sector_breakout_options[0]:
+                # Simple bars with sector colors, no breakout
+                for sector in sectors_sorted_reversed:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector]
+                    if not df_sec.empty:
+                        value = df_sec['change'].iloc[0]
+                        base_color = sector_color_map.get(sector, "#999999")
+
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=sector,
+                            y=[sector],
+                            x=[value],
+                            orientation='h',
+                            marker_color=base_color,
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"Net Change: %{{x:,.0f}}<extra></extra>"
+                        ))
+            elif sector_breakout == "Global North/South":
+                # Global North/South view - use shades of sector color
+                for sector in sectors_sorted_reversed:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
+                    df_sec['sort_order'] = df_sec['subsector'].map({'Global North': 0, 'Global South': 1})
+                    df_sec = df_sec.sort_values('sort_order')
+                    base_color = sector_color_map.get(sector, "#999999")
+                    classifications = df_sec['subsector'].tolist()
+                    shades = create_color_shades(base_color, len(classifications))
+                    for i, (_, row) in enumerate(df_sec.iterrows()):
+                        classification = row['subsector']
+                        value = row['change']
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=f"{sector}: {classification}",
+                            y=[sector],
+                            x=[value],
+                            orientation='h',
+                            marker_color=shades[i],
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"{classification}: %{{x:,.0f}}<extra></extra>"
+                        ))
+            else:
+                # Subsector view (default) - stacked bars with shades
+                for sector in sectors_sorted_reversed:
+                    df_sec = df_sector_viz[df_sector_viz['sector'] == sector].copy()
+                    df_sec['abs_change'] = df_sec['change'].abs()
+                    df_sec = df_sec.sort_values('abs_change', ascending=False)
+                    base_color = sector_color_map.get(sector, "#999999")
+                    subsectors_list = df_sec['subsector'].tolist()
+                    shades = create_color_shades(base_color, len(subsectors_list))
+                    for i, (_, row) in enumerate(df_sec.iterrows()):
+                        subsector = row['subsector']
+                        value = row['change']
+                        fig_sector_movers.add_trace(go.Bar(
+                            name=f"{sector}: {subsector}",
+                            y=[sector],
+                            x=[value],
+                            orientation='h',
+                            marker_color=shades[i],
+                            showlegend=False,
+                            hovertemplate=f"<b>{sector.replace('-', ' ').title()}</b><br>" +
+                                          f"{subsector.replace('-', ' ').title()}: %{{x:,.0f}}<extra></extra>"
+                        ))
+
+            fig_sector_movers.update_layout(
+                barmode='relative',
+                xaxis_title='Emissions Change (tCO₂e)',
+                yaxis_title='Sector',
+                height=640,
+                showlegend=False,
+                margin=dict(l=150, r=80, t=30, b=50),
+                yaxis=dict(
+                    categoryorder='array',
+                    categoryarray=sectors_sorted_reversed
+                )
+            )
+
+            # Add thick vertical line at x=0
+            fig_sector_movers.add_vline(x=0, line_width=3, line_color="#666666", opacity=0.9)
+
+            # Add net change labels for each sector
+            for sector in sectors_sorted:
+                net_change = sector_totals[sector]
+                df_sec_labels = df_sector_viz[df_sector_viz['sector'] == sector]
+                positive_extent = df_sec_labels[df_sec_labels['change'] > 0]['change'].sum()
+                negative_extent = df_sec_labels[df_sec_labels['change'] < 0]['change'].sum()
+
+                if abs(net_change) < 0.5:
+                    arrow = ""
+                    color = "white"
+                    text = "0"
+                    x_pos = 0
                     x_anchor = "left"
                     xshift = 10
                 else:
-                    x_pos = negative_extent  # Furthest negative extent
-                    x_anchor = "right"
-                    xshift = -10
+                    arrow = "↑" if net_change > 0 else "↓"
+                    color = "red" if net_change > 0 else "green"
+                    text = f"{arrow} {format_number_short(abs(net_change))}"
+                    if net_change > 0:
+                        x_pos = positive_extent
+                        x_anchor = "left"
+                        xshift = 10
+                    else:
+                        x_pos = negative_extent
+                        x_anchor = "right"
+                        xshift = -10
 
-            fig_sector_movers.add_annotation(
-                x=x_pos,
-                y=sector,
-                text=text,
-                showarrow=False,
-                font=dict(size=13, color=color, family="Arial"),
-                xanchor=x_anchor,
-                xshift=xshift
-            )
+                fig_sector_movers.add_annotation(
+                    x=x_pos,
+                    y=sector,
+                    text=text,
+                    showarrow=False,
+                    font=dict(size=13, color=color, family="Arial"),
+                    xanchor=x_anchor,
+                    xshift=xshift
+                )
 
         st.plotly_chart(fig_sector_movers, use_container_width=True)
 
     # ==================== Country Sector Movers Visualizations ====================
     with viz_col2:
-        st.markdown("#### Country Movers")
+        st.markdown("#### " + ("Country Inventory" if is_inventory_view else "Country Movers"))
 
         # Add Country Sector Movers breakout toggle with label to the left
+        country_breakout_options = ["Total", "Sector"]
         label_col2, toggle_col2 = st.columns([0.8, 3.2], gap="small")
         with label_col2:
             st.markdown("<div style='padding-top: 8px; font-size: 0.9em; font-weight: 500;'>Breakdown Country by:</div>", unsafe_allow_html=True)
         with toggle_col2:
             country_breakout = st.segmented_control(
                 "Country Sector Movers Breakout",
-                options=["Total Net Change", "Sector"],
-                default="Total Net Change",
+                options=country_breakout_options,
+                default=country_breakout_options[0],
                 key="country_movers_breakout",
                 label_visibility="collapsed"
             )
@@ -1431,6 +1539,19 @@ def show_monthly_trends_v2():
 
             df_country_sector = df_current_cs.merge(df_previous_cs, on=['country_name', 'sector'], how='outer').fillna(0)
             df_country_sector['change'] = df_country_sector['current_ytd'] - df_country_sector['previous_ytd']
+        elif is_inventory_view:
+            # Inventory view: query total emissions for the selected year
+            country_inv_query = f"""
+                SELECT
+                    country_name,
+                    sector,
+                    SUM("{inv_current_col}") as change
+                FROM '{country_subsector_stats_path}'
+                WHERE {where_clause}
+                    and country_name <> 'Unknown'
+                GROUP BY country_name, sector
+            """
+            df_country_sector = con.execute(country_inv_query).df()
         else:
             # Query DuckDB directly for aggregated data instead of pandas groupby
             change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
@@ -1461,188 +1582,142 @@ def show_monthly_trends_v2():
             df_country_sector = con.execute(country_sector_query).df()
 
         # Apply breakout transformations based on selected view
-        if country_breakout == "Total Net Change":
+        if country_breakout == country_breakout_options[0]:
             # Aggregate to country level only (no sector breakout)
             df_country_sector = df_country_sector.groupby('country_name')['change'].sum().reset_index()
-            df_country_sector['sector'] = 'Net Change'  # Placeholder for compatibility
+            df_country_sector['sector'] = 'Total Inventory' if is_inventory_view else 'Net Change'
 
         # Get top countries by increase and decrease
         country_totals = df_country_sector.groupby('country_name')['change'].sum().sort_values(ascending=False)
 
-        # Get all countries for rangeslider
-        all_increases = [loc for loc in country_totals.index if country_totals[loc] > 0]
-        all_decreases = [loc for loc in country_totals.index if country_totals[loc] < 0]
+        if is_inventory_view:
+            # ---- INVENTORY VIEW: single chart, vertical bars, all countries ----
+            all_increases = []
+            all_decreases = []
 
-        # Check if there are any countries with net decreases
-        has_decreases = len(all_decreases) > 0
+            # Sort countries by total inventory (highest to lowest)
+            countries_sorted_inv = country_totals.sort_values(ascending=False).index.tolist()
 
-        # --- Top Increases Chart ---
-        increases_to_show = all_increases if len(all_increases) > 0 else []
+            fig_country_inv = go.Figure()
 
-        # Filter data for increases
-        df_top_increases = df_country_sector[df_country_sector['country_name'].isin(increases_to_show)]
+            # Order sectors by their total contribution (largest first = at base)
+            sector_totals_c = df_country_sector.groupby('sector')['change'].sum().sort_values(ascending=False)
+            sectors_sorted_c = sector_totals_c.index.tolist()
 
-        # Create vertical stacked bar chart
-        fig_increases = go.Figure()
-
-        # Sort countries by total change (highest to lowest)
-        country_totals_inc = df_top_increases.groupby('country_name')['change'].sum().sort_values(ascending=False)
-        countries_sorted_inc = country_totals_inc.index.tolist()
-
-        # Order sectors by their total absolute contribution (largest first = at base)
-        sector_totals = df_top_increases.groupby('sector')['change'].apply(lambda x: x.abs().sum()).sort_values(ascending=False)
-        sectors_sorted_by_contribution = sector_totals.index.tolist()
-
-        # Create bar traces based on breakout view
-        if country_breakout == "Total Net Change":
-            # Simple bars with neutral color (works in light/dark mode)
-            values = [country_totals_inc[loc] for loc in countries_sorted_inc]
-
-            fig_increases.add_trace(go.Bar(
-                name='Net Change',
-                x=countries_sorted_inc,
-                y=values,
-                marker_color='#4A90E2',  # Neutral blue
-                hovertemplate="<b>%{x}</b><br>Net Change: %{y:,.0f}<extra></extra>"
-            ))
-        else:
-            # Sector view (default) - stacked bars with sector colors
-            for sector in sectors_sorted_by_contribution:
-                df_sec = df_top_increases[df_top_increases['sector'] == sector]
-
-                # Create data aligned with countries_sorted_inc
-                values = []
-                for loc in countries_sorted_inc:
-                    val = df_sec[df_sec['country_name'] == loc]['change'].sum()
-                    values.append(val)
-
-                fig_increases.add_trace(go.Bar(
-                    name=sector.replace('-', ' ').title(),
-                    x=countries_sorted_inc,
-                    y=values,
-                    marker_color=sector_color_map.get(sector, "#999999"),
-                    hovertemplate=f"<b>%{{x}}</b><br>{sector.replace('-', ' ').title()}: %{{y:,.0f}}<extra></extra>"
-                ))
-
-        fig_increases.update_layout(
-            barmode='relative',  # Use 'relative' to properly stack positive/negative values
-            yaxis_title='Emissions Change (tCO₂e)',
-            height=350,
-            showlegend=False,
-            margin=dict(l=70, r=50, t=30, b=70),
-            xaxis=dict(
-                tickangle=-45,
-                rangeslider=dict(visible=True),
-                type="category"
-            )
-        )
-
-        # Set initial range to show top 10 if more than 10
-        if len(countries_sorted_inc) > 10:
-            top10_range_inc = [
-                countries_sorted_inc.index(countries_sorted_inc[0]) - 0.5,
-                countries_sorted_inc.index(countries_sorted_inc[9]) + 0.5,
-            ]
-            fig_increases.update_xaxes(range=top10_range_inc, type="category")
-
-        # Add horizontal line at y=0 (gray works in both light and dark mode)
-        fig_increases.add_hline(y=0, line_width=3, line_color="#666666", opacity=0.9)
-
-        # Add net change labels for each country (positioned above bars in red)
-        for loc in countries_sorted_inc:
-            net_change = country_totals_inc[loc]
-
-            # Get the sector data for this country to find bar extents
-            df_country_labels = df_top_increases[df_top_increases['country_name'] == loc]
-            positive_extent = df_country_labels[df_country_labels['change'] > 0]['change'].sum()
-
-            # Handle zero case specially
-            if abs(net_change) < 0.5:  # Essentially zero
-                arrow = ""
-                color = "white"
-                text = "0"
-                y_pos = 0
-                y_anchor = "bottom"
-                yshift = 10
-            else:
-                arrow = "↑"
-                color = "red"
-                text = f"{arrow} {format_number_short(abs(net_change))}"
-
-                # Position label at the furthest extent of bars
-                # For increases chart, bars extend upward, so use positive extent
-                y_pos = positive_extent
-                y_anchor = "bottom"
-                yshift = 10
-
-            fig_increases.add_annotation(
-                x=loc,
-                y=y_pos,
-                text=text,
-                showarrow=False,
-                font=dict(size=12, color=color, family="Arial"),
-                yanchor=y_anchor,
-                yshift=yshift
-            )
-
-        st.plotly_chart(fig_increases, use_container_width=True)
-
-        # --- Top Decreases Chart (only show if there are decreases) ---
-        if has_decreases:
-            # Show all decreases
-            decreases_to_show = all_decreases
-
-            # Filter data for decreases
-            df_top_decreases = df_country_sector[df_country_sector['country_name'].isin(decreases_to_show)]
-
-            # Create vertical stacked bar chart
-            fig_decreases = go.Figure()
-
-            # Sort countries by total change (lowest to highest, showing most negative first)
-            country_totals_dec = df_top_decreases.groupby('country_name')['change'].sum().sort_values()
-            countries_sorted_dec = country_totals_dec.index.tolist()
-
-            # Order sectors by their total absolute contribution (largest first = at base)
-            sector_totals_dec = df_top_decreases.groupby('sector')['change'].apply(lambda x: x.abs().sum()).sort_values(ascending=False)
-            sectors_sorted_dec = sector_totals_dec.index.tolist()
-
-            # Create bar traces based on breakout view
-            if country_breakout == "Total Net Change":
+            if country_breakout == country_breakout_options[0]:
                 # Simple bars with neutral color
-                values = [country_totals_dec[loc] for loc in countries_sorted_dec]
-
-                fig_decreases.add_trace(go.Bar(
-                    name='Net Change',
-                    x=countries_sorted_dec,
+                values = [country_totals[loc] for loc in countries_sorted_inv]
+                fig_country_inv.add_trace(go.Bar(
+                    name='Total Inventory',
+                    x=countries_sorted_inv,
                     y=values,
-                    marker_color='#4A90E2',  # Neutral blue
-                    hovertemplate="<b>%{x}</b><br>Net Change: %{y:,.0f}<extra></extra>"
+                    marker_color='#4A90E2',
+                    hovertemplate="<b>%{x}</b><br>Total: %{y:,.0f}<extra></extra>"
                 ))
             else:
-                # Sector view (default) - stacked bars with sector colors
-                for sector in sectors_sorted_dec:
-                    df_sec = df_top_decreases[df_top_decreases['sector'] == sector]
-
-                    # Create data aligned with countries_sorted_dec
+                # Sector breakout - stacked bars with sector colors
+                for sector in sectors_sorted_c:
+                    df_sec = df_country_sector[df_country_sector['sector'] == sector]
                     values = []
-                    for loc in countries_sorted_dec:
+                    for loc in countries_sorted_inv:
                         val = df_sec[df_sec['country_name'] == loc]['change'].sum()
                         values.append(val)
-
-                    fig_decreases.add_trace(go.Bar(
+                    fig_country_inv.add_trace(go.Bar(
                         name=sector.replace('-', ' ').title(),
-                        x=countries_sorted_dec,
+                        x=countries_sorted_inv,
                         y=values,
                         marker_color=sector_color_map.get(sector, "#999999"),
                         hovertemplate=f"<b>%{{x}}</b><br>{sector.replace('-', ' ').title()}: %{{y:,.0f}}<extra></extra>"
                     ))
 
-            fig_decreases.update_layout(
-                barmode='relative',  # Use 'relative' to properly stack positive/negative values
+            fig_country_inv.update_layout(
+                barmode='stack',
+                yaxis_title='Total Emissions (tCO₂e)',
+                height=640,
+                showlegend=False,
+                margin=dict(l=70, r=50, t=30, b=120),
+                xaxis=dict(
+                    tickangle=-45,
+                    rangeslider=dict(visible=True, thickness=0.04),
+                    type="category",
+                    categoryorder='array',
+                    categoryarray=countries_sorted_inv,
+                )
+            )
+
+            # Set initial range to show top 10 if more than 10
+            if len(countries_sorted_inv) > 10:
+                fig_country_inv.update_xaxes(
+                    range=[-0.5, 9.5],
+                    type="category"
+                )
+
+            # Add inventory value labels above each bar (red, no arrows)
+            for loc in countries_sorted_inv:
+                total_val = country_totals[loc]
+                df_loc_labels = df_country_sector[df_country_sector['country_name'] == loc]
+                bar_top = df_loc_labels[df_loc_labels['change'] > 0]['change'].sum()
+
+                fig_country_inv.add_annotation(
+                    x=loc,
+                    y=bar_top,
+                    text=format_number_short(abs(total_val)),
+                    showarrow=False,
+                    font=dict(size=12, color="red", family="Arial"),
+                    yanchor="bottom",
+                    yshift=10
+                )
+
+            st.plotly_chart(fig_country_inv, use_container_width=True)
+
+        else:
+            # ---- CHANGE VIEWS: split into increases and decreases charts ----
+            # Get all countries for rangeslider
+            all_increases = [loc for loc in country_totals.index if country_totals[loc] > 0]
+            all_decreases = [loc for loc in country_totals.index if country_totals[loc] < 0]
+
+            has_decreases = len(all_decreases) > 0
+
+            # --- Top Increases Chart ---
+            increases_to_show = all_increases if len(all_increases) > 0 else []
+            df_top_increases = df_country_sector[df_country_sector['country_name'].isin(increases_to_show)]
+
+            fig_increases = go.Figure()
+            country_totals_inc = df_top_increases.groupby('country_name')['change'].sum().sort_values(ascending=False)
+            countries_sorted_inc = country_totals_inc.index.tolist()
+            sector_totals_inc = df_top_increases.groupby('sector')['change'].apply(lambda x: x.abs().sum()).sort_values(ascending=False)
+            sectors_sorted_by_contribution = sector_totals_inc.index.tolist()
+
+            if country_breakout == country_breakout_options[0]:
+                values = [country_totals_inc[loc] for loc in countries_sorted_inc]
+                fig_increases.add_trace(go.Bar(
+                    name='Net Change',
+                    x=countries_sorted_inc,
+                    y=values,
+                    marker_color='#4A90E2',
+                    hovertemplate="<b>%{x}</b><br>Net Change: %{y:,.0f}<extra></extra>"
+                ))
+            else:
+                for sector in sectors_sorted_by_contribution:
+                    df_sec = df_top_increases[df_top_increases['sector'] == sector]
+                    values = []
+                    for loc in countries_sorted_inc:
+                        val = df_sec[df_sec['country_name'] == loc]['change'].sum()
+                        values.append(val)
+                    fig_increases.add_trace(go.Bar(
+                        name=sector.replace('-', ' ').title(),
+                        x=countries_sorted_inc,
+                        y=values,
+                        marker_color=sector_color_map.get(sector, "#999999"),
+                        hovertemplate=f"<b>%{{x}}</b><br>{sector.replace('-', ' ').title()}: %{{y:,.0f}}<extra></extra>"
+                    ))
+
+            fig_increases.update_layout(
+                barmode='relative',
                 yaxis_title='Emissions Change (tCO₂e)',
                 height=350,
                 showlegend=False,
-                margin=dict(l=70, r=50, t=10, b=90),
+                margin=dict(l=70, r=50, t=30, b=70),
                 xaxis=dict(
                     tickangle=-45,
                     rangeslider=dict(visible=True),
@@ -1650,85 +1725,130 @@ def show_monthly_trends_v2():
                 )
             )
 
-            # Set initial range to show top 10 if more than 10
-            if len(countries_sorted_dec) > 10:
-                # For decreases, show the 10 most negative (at the beginning of the sorted list)
-                top10_range_dec = [
-                    countries_sorted_dec.index(countries_sorted_dec[0]) - 0.5,
-                    countries_sorted_dec.index(countries_sorted_dec[9]) + 0.5,
-                ]
-                fig_decreases.update_xaxes(range=top10_range_dec, type="category")
+            if len(countries_sorted_inc) > 10:
+                fig_increases.update_xaxes(range=[-0.5, 9.5], type="category")
 
-            # Add horizontal line at y=0 (gray works in both light and dark mode)
-            fig_decreases.add_hline(y=0, line_width=3, line_color="#666666", opacity=0.9)
+            fig_increases.add_hline(y=0, line_width=3, line_color="#666666", opacity=0.9)
 
-            # Add net change labels for each country (positioned below bars in green)
-            for loc in countries_sorted_dec:
-                net_change = country_totals_dec[loc]
+            for loc in countries_sorted_inc:
+                net_change = country_totals_inc[loc]
+                df_country_labels = df_top_increases[df_top_increases['country_name'] == loc]
+                positive_extent = df_country_labels[df_country_labels['change'] > 0]['change'].sum()
 
-                # Get the sector data for this country to find bar extents
-                df_country_labels_dec = df_top_decreases[df_top_decreases['country_name'] == loc]
-                negative_extent_dec = df_country_labels_dec[df_country_labels_dec['change'] < 0]['change'].sum()
-
-                # Handle zero case specially
-                if abs(net_change) < 0.5:  # Essentially zero
-                    arrow = ""
-                    color = "white"
+                if abs(net_change) < 0.5:
                     text = "0"
+                    color = "white"
                     y_pos = 0
-                    y_anchor = "top"
-                    yshift = -10
                 else:
-                    arrow = "↓"
-                    color = "green"
-                    text = f"{arrow} {format_number_short(abs(net_change))}"
+                    color = "red"
+                    text = f"↑ {format_number_short(abs(net_change))}"
+                    y_pos = positive_extent
 
-                    # Position label at the furthest extent of bars
-                    # For decreases chart, bars extend downward, so use negative extent
-                    y_pos = negative_extent_dec
-                    y_anchor = "top"
-                    yshift = -10
-
-                fig_decreases.add_annotation(
-                    x=loc,
-                    y=y_pos,
-                    text=text,
-                    showarrow=False,
+                fig_increases.add_annotation(
+                    x=loc, y=y_pos, text=text, showarrow=False,
                     font=dict(size=12, color=color, family="Arial"),
-                    yanchor=y_anchor,
-                    yshift=yshift
+                    yanchor="bottom", yshift=10
                 )
 
-            st.plotly_chart(fig_decreases, use_container_width=True)
-        else:
-            # Show placeholder when no decreases exist
-            st.markdown(
-                """
-                <div style='border: 1px solid #444; border-radius: 8px; height: 180px; display: flex; align-items: center; justify-content: center; background-color: #1e1e1e;'>
-                    <p style='color: #888; font-size: 1.1em; text-align: center; padding: 20px;'>
-                        No countries experienced net emission decreases<br>during the selected time period
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.plotly_chart(fig_increases, use_container_width=True)
+
+            # --- Top Decreases Chart ---
+            if has_decreases:
+                decreases_to_show = all_decreases
+                df_top_decreases = df_country_sector[df_country_sector['country_name'].isin(decreases_to_show)]
+
+                fig_decreases = go.Figure()
+                country_totals_dec = df_top_decreases.groupby('country_name')['change'].sum().sort_values()
+                countries_sorted_dec = country_totals_dec.index.tolist()
+                sector_totals_dec = df_top_decreases.groupby('sector')['change'].apply(lambda x: x.abs().sum()).sort_values(ascending=False)
+                sectors_sorted_dec = sector_totals_dec.index.tolist()
+
+                if country_breakout == country_breakout_options[0]:
+                    values = [country_totals_dec[loc] for loc in countries_sorted_dec]
+                    fig_decreases.add_trace(go.Bar(
+                        name='Net Change',
+                        x=countries_sorted_dec,
+                        y=values,
+                        marker_color='#4A90E2',
+                        hovertemplate="<b>%{x}</b><br>Net Change: %{y:,.0f}<extra></extra>"
+                    ))
+                else:
+                    for sector in sectors_sorted_dec:
+                        df_sec = df_top_decreases[df_top_decreases['sector'] == sector]
+                        values = []
+                        for loc in countries_sorted_dec:
+                            val = df_sec[df_sec['country_name'] == loc]['change'].sum()
+                            values.append(val)
+                        fig_decreases.add_trace(go.Bar(
+                            name=sector.replace('-', ' ').title(),
+                            x=countries_sorted_dec,
+                            y=values,
+                            marker_color=sector_color_map.get(sector, "#999999"),
+                            hovertemplate=f"<b>%{{x}}</b><br>{sector.replace('-', ' ').title()}: %{{y:,.0f}}<extra></extra>"
+                        ))
+
+                fig_decreases.update_layout(
+                    barmode='relative',
+                    yaxis_title='Emissions Change (tCO₂e)',
+                    height=350,
+                    showlegend=False,
+                    margin=dict(l=70, r=50, t=10, b=90),
+                    xaxis=dict(
+                        tickangle=-45,
+                        rangeslider=dict(visible=True),
+                        type="category"
+                    )
+                )
+
+                if len(countries_sorted_dec) > 10:
+                    fig_decreases.update_xaxes(range=[-0.5, 9.5], type="category")
+
+                fig_decreases.add_hline(y=0, line_width=3, line_color="#666666", opacity=0.9)
+
+                for loc in countries_sorted_dec:
+                    net_change = country_totals_dec[loc]
+                    df_country_labels_dec = df_top_decreases[df_top_decreases['country_name'] == loc]
+                    negative_extent_dec = df_country_labels_dec[df_country_labels_dec['change'] < 0]['change'].sum()
+
+                    if abs(net_change) < 0.5:
+                        text = "0"
+                        color = "white"
+                        y_pos = 0
+                    else:
+                        color = "green"
+                        text = f"↓ {format_number_short(abs(net_change))}"
+                        y_pos = negative_extent_dec
+
+                    fig_decreases.add_annotation(
+                        x=loc, y=y_pos, text=text, showarrow=False,
+                        font=dict(size=12, color=color, family="Arial"),
+                        yanchor="top", yshift=-10
+                    )
+
+                st.plotly_chart(fig_decreases, use_container_width=True)
+            else:
+                st.markdown(
+                    """
+                    <div style='border: 1px solid #444; border-radius: 8px; height: 180px; display: flex; align-items: center; justify-content: center; background-color: #1e1e1e;'>
+                        <p style='color: #888; font-size: 1.1em; text-align: center; padding: 20px;'>
+                            No countries experienced net emission decreases<br>during the selected time period
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
     # ==================== Unified Country Rankings Table ====================
     # st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### Country Rankings")
 
-    # Add dropdowns for ranking configuration and download button
-    rank_col1, rank_col2, rank_spacer = st.columns([2.5, 2.5, 8])
+    # Derive rank metric from trend view (no separate toggle needed)
+    rank_metric = "Total Inventory" if is_inventory_view else "Emissions Changes"
+
+    # Add dropdown for grouping level
+    rank_col1, rank_spacer = st.columns([2.5, 10.5])
 
     with rank_col1:
-        rank_metric = st.segmented_control(
-            "Ranking Metric",
-            options=["Emissions Changes", "Total Inventory"],
-            default="Emissions Changes",
-            key="rank_metric_selector",
-        )
-
-    with rank_col2:
         rank_breakdown = st.segmented_control(
             "Grouping Level",
             options=["Country-Sector", "Country-Subsector"],
@@ -1791,6 +1911,21 @@ def show_monthly_trends_v2():
         df_rankings = df_current_rank.merge(df_previous_rank, on=group_by_cols, how='outer').fillna(0)
         df_rankings['change'] = df_rankings['current'] - df_rankings['previous']
 
+    elif is_inventory_view:
+        rank_where_clause = " AND ".join(rank_where_clauses)
+        rank_inv_query = f"""
+            SELECT
+                {group_by_sql},
+                SUM("{inv_current_col}") as current,
+                SUM("{inv_previous_col}") as previous
+            FROM '{country_subsector_stats_path}'
+            WHERE {rank_where_clause}
+                and country_name <> 'Unknown'
+            GROUP BY {group_by_sql}
+        """
+        df_rankings = con.execute(rank_inv_query).df()
+        df_rankings['change'] = df_rankings['current'] - df_rankings['previous']
+
     else:
         rank_where_clause = " AND ".join(rank_where_clauses)
 
@@ -1843,6 +1978,18 @@ def show_monthly_trends_v2():
         rank_col = 'current'
         sector_sort_agg = df_rankings.groupby('sector')['current'].sum()
         sectors = sector_sort_agg.sort_values(ascending=False).index.tolist()
+
+    # Shorten long display names for the rankings table (display only, not download)
+    _display_name_map = {
+        "Democratic Republic of the Congo": "DR of the Congo",
+    }
+    _display_subsector_map = {
+        "domestic-wastewater-treatment-and-discharge": "domestic-wastewater",
+        "industrial-wastewater-treatment-and-discharge": "industrial-wastewater",
+    }
+    df_rankings['country_name'] = df_rankings['country_name'].replace(_display_name_map)
+    if 'subsector' in df_rankings.columns:
+        df_rankings['subsector'] = df_rankings['subsector'].replace(_display_subsector_map)
 
     # Build global top-10
     df_top10_global = df_rankings.nlargest(10, rank_col).copy()
@@ -2292,6 +2439,46 @@ def show_monthly_trends_v2():
             ef_ytd_change = ef_ytd_cur - ef_ytd_prev
             ef_ytd_pct = (ef_ytd_change / ef_ytd_prev * 100) if ef_ytd_prev != 0 else 0
 
+        # --- Emissions: Inventory year totals from stats table ---
+        if is_inventory_view:
+            dd_inv_query = f"""
+                SELECT
+                    SUM("{inv_current_col}") as inv_current,
+                    SUM("{inv_previous_col}") as inv_previous
+                FROM '{country_subsector_stats_path}'
+                WHERE {dd_where_clause}
+            """
+            df_dd_inv = con.execute(dd_inv_query).df()
+            em_inv_current = df_dd_inv['inv_current'].iloc[0] or 0
+            em_inv_previous = df_dd_inv['inv_previous'].iloc[0] or 0
+            em_inv_change = em_inv_current - em_inv_previous
+            em_inv_pct = (em_inv_change / em_inv_previous * 100) if em_inv_previous != 0 else 0
+
+            # Activity / EF for inventory year comparison
+            if show_activity_and_ef_cards:
+                df_asset_inv = con.execute(f"""
+                    SELECT strftime(start_time, '%Y') AS year,
+                           SUM(activity) AS activity, SUM(emissions_quantity) AS emissions_quantity
+                    FROM '{asset_path}'
+                    WHERE {asset_where_clause}
+                        AND strftime(start_time, '%Y') IN ('{inventory_year}', '{inventory_year - 1}')
+                    GROUP BY year ORDER BY year
+                """).df()
+
+                def _get_inv_asset(df, yr):
+                    row = df[df['year'] == str(yr)]
+                    return (row.iloc[0]['activity'], row.iloc[0]['emissions_quantity']) if not row.empty else (0, 0)
+
+                act_inv_cur, em_inv_cur_asset = _get_inv_asset(df_asset_inv, inventory_year)
+                act_inv_prev, em_inv_prev_asset = _get_inv_asset(df_asset_inv, inventory_year - 1)
+                act_inv_change = act_inv_cur - act_inv_prev
+                act_inv_pct = (act_inv_change / act_inv_prev * 100) if act_inv_prev != 0 else 0
+
+                ef_inv_cur = (em_inv_cur_asset / act_inv_cur) if act_inv_cur != 0 else 0
+                ef_inv_prev = (em_inv_prev_asset / act_inv_prev) if act_inv_prev != 0 else 0
+                ef_inv_change = ef_inv_cur - ef_inv_prev
+                ef_inv_pct = (ef_inv_change / ef_inv_prev * 100) if ef_inv_prev != 0 else 0
+
         # ==================== Display 3 Cards ====================
 
         def _fmt_ef(val):
@@ -2326,6 +2513,17 @@ def show_monthly_trends_v2():
                 act_cur_val, act_prev_val = act_ytd_cur, act_ytd_prev
                 ef_change_val, ef_pct_val = ef_ytd_change, ef_ytd_pct
                 ef_cur_val, ef_prev_val = ef_ytd_cur, ef_ytd_prev
+        elif is_inventory_view:
+            tv_short = f"{inventory_year} vs {inventory_year - 1}"
+            em_change, em_pct = em_inv_change, em_inv_pct
+            em_cur_val, em_prev_val = em_inv_current, em_inv_previous
+            cur_label = str(inventory_year)
+            prev_label = str(inventory_year - 1)
+            if show_activity_and_ef_cards:
+                act_change_val, act_pct_val = act_inv_change, act_inv_pct
+                act_cur_val, act_prev_val = act_inv_cur, act_inv_prev
+                ef_change_val, ef_pct_val = ef_inv_change, ef_inv_pct
+                ef_cur_val, ef_prev_val = ef_inv_cur, ef_inv_prev
         else:  # Month-over-Month
             tv_short = "MoM"
             em_change, em_pct = em_mom_change, em_mom_pct
@@ -2618,6 +2816,8 @@ def show_monthly_trends_v2():
         time_period_desc = month_name[latest_month] + " " + str(latest_year) + " vs " + month_name[latest_month] + " " + str(latest_year - 1)
     elif trend_view == "Year-to-Date YoY":
         time_period_desc = "January - " + month_name[latest_month] + " " + str(latest_year) + " vs January - " + month_name[latest_month] + " " + str(latest_year - 1)
+    elif is_inventory_view:
+        time_period_desc = f"{inventory_year} Total Inventory (vs {inventory_year - 1})"
     else:  # MoM
         if latest_month == 1:
             prev_m, prev_y = 12, latest_year - 1
@@ -2647,6 +2847,8 @@ def show_monthly_trends_v2():
         "df_ts_emissions": df_ts_emissions,
         "df_ts_asset": df_ts_asset,
         "stats_path": country_subsector_stats_path,
+        "is_inventory_view": is_inventory_view,
+        "inventory_year": inventory_year,
     }
 
     @st.fragment
@@ -2688,10 +2890,11 @@ def show_monthly_trends_v2():
 
             dl_cols = st.columns([0.5, 1.1, 1.2, 1.2, 1.3, 1.1, 1.5])
 
+            _is_inv = data.get("is_inventory_view", False)
             with dl_cols[1]:
-                dl_sector = st.checkbox("Sector Movers", key="dl_sector", value=True)
+                dl_sector = st.checkbox("Sector Inventory" if _is_inv else "Sector Movers", key="dl_sector", value=True)
             with dl_cols[2]:
-                dl_country = st.checkbox("Country Movers", key="dl_country", value=True)
+                dl_country = st.checkbox("Country Inventory" if _is_inv else "Country Movers", key="dl_country", value=True)
             with dl_cols[3]:
                 dl_rankings_cb = st.checkbox("Country Rankings", key="dl_rankings", value=True)
             with dl_cols[4]:
@@ -2727,7 +2930,9 @@ def show_monthly_trends_v2():
                                 ws.write(i, 0, k, bold)
                                 ws.write(i, 1, str(v))
 
+                        _is_inv = data_dict.get("is_inventory_view", False)
                         if selections["sector"]:
+                            _sec_sheet = "Sector Inventory" if _is_inv else "Sector Movers"
                             metadata = [
                                 ("Time Period", data_dict["trend_view"]),
                                 ("Comparison", data_dict["time_period_desc"]),
@@ -2736,15 +2941,17 @@ def show_monthly_trends_v2():
                             ]
                             start = len(metadata) + 1
                             df_sec_out = data_dict["df_sector_viz"].copy()
-                            # Sort: sector by highest absolute change, then subsector by highest absolute change within sector
+                            # Sort: sector by highest absolute total, then subsector by highest absolute value within sector
                             sector_abs_totals = df_sec_out.groupby("sector")["change"].sum().abs().rename("_sector_abs_total")
                             df_sec_out = df_sec_out.merge(sector_abs_totals, on="sector")
                             df_sec_out["_abs_change"] = df_sec_out["change"].abs()
                             df_sec_out = df_sec_out.sort_values(["_sector_abs_total", "_abs_change"], ascending=[False, False]).drop(columns=["_sector_abs_total", "_abs_change"])
-                            if data_dict["sector_breakout"] == "Total Net Change":
+                            if data_dict["sector_breakout"] == "Total":
                                 df_sec_out = df_sec_out.drop(columns=["subsector"], errors="ignore")
-                            df_sec_out.to_excel(writer, sheet_name="Sector Movers", startrow=start, index=False)
-                            write_metadata(writer.sheets["Sector Movers"], metadata)
+                            if _is_inv:
+                                df_sec_out = df_sec_out.rename(columns={"change": "total_emissions"})
+                            df_sec_out.to_excel(writer, sheet_name=_sec_sheet, startrow=start, index=False)
+                            write_metadata(writer.sheets[_sec_sheet], metadata)
 
                         if selections["country"]:
                             base_meta = [
@@ -2754,29 +2961,42 @@ def show_monthly_trends_v2():
                                 ("Breakout", data_dict["country_breakout"]),
                             ]
 
-                            inc_meta = base_meta + [("Direction", "Increases")]
-                            start = len(inc_meta) + 1
-                            df_inc = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_increases"])].copy()
-                            # Sort: country total change desc, then subsector change desc within each country
-                            country_totals_inc = df_inc.groupby("country_name")["change"].sum().rename("_country_total")
-                            df_inc = df_inc.merge(country_totals_inc, on="country_name")
-                            df_inc = df_inc.sort_values(["_country_total", "change"], ascending=[False, False]).drop(columns=["_country_total"])
-                            if data_dict["country_breakout"] == "Total Net Change":
-                                df_inc = df_inc.drop(columns=["sector"], errors="ignore")
-                            df_inc.to_excel(writer, sheet_name="Country Movers - Increase", startrow=start, index=False)
-                            write_metadata(writer.sheets["Country Movers - Increase"], inc_meta)
+                            if _is_inv:
+                                # Inventory view: single sheet sorted by total descending
+                                _cty_sheet = "Country Inventory"
+                                start = len(base_meta) + 1
+                                df_cty = data_dict["df_country_sector"].copy()
+                                country_totals_inv = df_cty.groupby("country_name")["change"].sum().rename("_country_total")
+                                df_cty = df_cty.merge(country_totals_inv, on="country_name")
+                                df_cty = df_cty.sort_values(["_country_total", "change"], ascending=[False, False]).drop(columns=["_country_total"])
+                                if data_dict["country_breakout"] == "Total":
+                                    df_cty = df_cty.drop(columns=["sector"], errors="ignore")
+                                df_cty = df_cty.rename(columns={"change": "total_emissions"})
+                                df_cty.to_excel(writer, sheet_name=_cty_sheet, startrow=start, index=False)
+                                write_metadata(writer.sheets[_cty_sheet], base_meta)
+                            else:
+                                # Change views: two sheets (Increase / Decrease)
+                                inc_meta = base_meta + [("Direction", "Increases")]
+                                start = len(inc_meta) + 1
+                                df_inc = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_increases"])].copy()
+                                country_totals_inc = df_inc.groupby("country_name")["change"].sum().rename("_country_total")
+                                df_inc = df_inc.merge(country_totals_inc, on="country_name")
+                                df_inc = df_inc.sort_values(["_country_total", "change"], ascending=[False, False]).drop(columns=["_country_total"])
+                                if data_dict["country_breakout"] == "Total":
+                                    df_inc = df_inc.drop(columns=["sector"], errors="ignore")
+                                df_inc.to_excel(writer, sheet_name="Country Movers - Increase", startrow=start, index=False)
+                                write_metadata(writer.sheets["Country Movers - Increase"], inc_meta)
 
-                            dec_meta = base_meta + [("Direction", "Decreases")]
-                            start = len(dec_meta) + 1
-                            df_dec = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_decreases"])].copy()
-                            # Sort: country total change asc (largest decrease first), then subsector change asc
-                            country_totals_dec = df_dec.groupby("country_name")["change"].sum().rename("_country_total")
-                            df_dec = df_dec.merge(country_totals_dec, on="country_name")
-                            df_dec = df_dec.sort_values(["_country_total", "change"], ascending=[True, True]).drop(columns=["_country_total"])
-                            if data_dict["country_breakout"] == "Total Net Change":
-                                df_dec = df_dec.drop(columns=["sector"], errors="ignore")
-                            df_dec.to_excel(writer, sheet_name="Country Movers - Decrease", startrow=start, index=False)
-                            write_metadata(writer.sheets["Country Movers - Decrease"], dec_meta)
+                                dec_meta = base_meta + [("Direction", "Decreases")]
+                                start = len(dec_meta) + 1
+                                df_dec = data_dict["df_country_sector"][data_dict["df_country_sector"]["country_name"].isin(data_dict["all_decreases"])].copy()
+                                country_totals_dec = df_dec.groupby("country_name")["change"].sum().rename("_country_total")
+                                df_dec = df_dec.merge(country_totals_dec, on="country_name")
+                                df_dec = df_dec.sort_values(["_country_total", "change"], ascending=[True, True]).drop(columns=["_country_total"])
+                                if data_dict["country_breakout"] == "Total":
+                                    df_dec = df_dec.drop(columns=["sector"], errors="ignore")
+                                df_dec.to_excel(writer, sheet_name="Country Movers - Decrease", startrow=start, index=False)
+                                write_metadata(writer.sheets["Country Movers - Decrease"], dec_meta)
 
                         if selections["rankings"]:
                             metadata = [
@@ -2786,8 +3006,15 @@ def show_monthly_trends_v2():
                                 ("Ranking Metric", data_dict["rank_metric"]),
                                 ("Grouping Level", data_dict["rank_breakdown"]),
                             ]
+                            if _is_inv and data_dict.get("inventory_year"):
+                                metadata.append(("Inventory Year", str(data_dict["inventory_year"])))
                             start = len(metadata) + 1
-                            data_dict["df_rankings"].to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
+                            df_rank_out = data_dict["df_rankings"].copy()
+                            if _is_inv:
+                                df_rank_out = df_rank_out.sort_values("current", ascending=False)
+                            else:
+                                df_rank_out = df_rank_out.sort_values("abs_change", ascending=False)
+                            df_rank_out.to_excel(writer, sheet_name="Country Rankings", startrow=start, index=False)
                             write_metadata(writer.sheets["Country Rankings"], metadata)
 
                         if selections["timeseries"]:
