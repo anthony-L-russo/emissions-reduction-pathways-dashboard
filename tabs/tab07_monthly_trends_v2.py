@@ -97,9 +97,15 @@ def show_monthly_trends_v2():
 
     with col_view:
         trend_view = st.segmented_control(
-            label="Change Time Period",
+            label="View Type",
             options=["Month YoY", "Year-to-Date YoY", "Month-over-Month", "Total Inventory"],
             default="Month YoY",
+            help=(
+            "Month YoY: Compares this month's emissions to the same month last year.\n\n"
+            "Year-to-Date YoY: Compares cumulative emissions from Jan–current month vs. the same period last year.\n\n"
+            "Month-over-Month: Compares this month's emissions to the immediate prior month.\n\n"
+            "Total Inventory: Shows total emissions inventory (total emissions) for selected inventory year."
+        )
         )
 
     is_inventory_view = (trend_view == "Total Inventory")
