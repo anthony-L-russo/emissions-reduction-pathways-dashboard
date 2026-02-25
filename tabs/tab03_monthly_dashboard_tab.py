@@ -74,6 +74,12 @@ def show_monthly_dashboard():
     sector_map["All"] = None
 
 
+    lens = st.segmented_control(
+        "Trend Lens",
+        options=["📈 MoM", "📅 YoY Month", "📊 Cumulative"],
+        default="📈 MoM"
+    )
+
     # --- ROW 1 ---
     region_dropdown, sector_dropdown, gas_drodpdown = st.columns(3)
     with region_dropdown:

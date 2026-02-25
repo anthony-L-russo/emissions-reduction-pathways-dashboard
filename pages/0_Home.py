@@ -1,9 +1,14 @@
 import streamlit as st
 import base64
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("<br>", unsafe_allow_html=True)
+
+# Tag added to avoid search engines
+st.markdown("""
+<meta name="robots" content="noindex,nofollow">
+""", unsafe_allow_html=True)
 
 # --- Style cleanup ---
 st.markdown(
@@ -23,32 +28,38 @@ st.markdown(
         background-color: #262730;
         border: 1px solid #444;
         border-radius: 12px;
-        padding: 25px;
+        padding: 16px 14px;
         text-align: center;
         transition: all 0.2s ease-in-out;
         cursor: pointer;
-        display: block;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
         color: inherit;
-        width: 90%;
-        margin: 0 auto;
+        height: 340px;
+        width: 100%;
+        box-sizing: border-box;
     }
     .tool-card:hover {
         border-color: #ff4b4b;
         transform: translateY(-4px);
     }
     .tool-icon {
-        font-size: 2.5rem;
+        font-size: 5rem;
     }
     .tool-title {
-        font-size: 1.4rem;
+        font-size: 1.1rem;
         font-weight: 600;
-        margin-top: 10px;
+        margin-top: 6px;
         color: #1f77ff;
+        line-height: 1.2;
     }
     .tool-desc {
-        font-size: 1rem;
+        font-size: 0.78rem;
         color: #bbb;
-        margin-top: 8px;
+        margin-top: 5px;
+        line-height: 1.3;
     }
     </style>
     """,
@@ -75,92 +86,79 @@ st.markdown(
 
 
 st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("<br>", unsafe_allow_html=True)
-#st.markdown("<br>", unsafe_allow_html=True)
 
+# ---- 3-column grid: top row ----
+top1, top2, top3 = st.columns(3, gap="medium")
 
-
-
-# ---- 3-column layout ----
-col1, col2 = st.columns(2)
-
-
-with col1:
+with top1:
     st.markdown(
-    """
+        """
         <a href="/Sector_Reduction_Pathways" target="_self" style="text-decoration: none; display: block;">
-            <div class="tool-card"
-                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">🧭</div>
+            <div class="tool-card">
+                <div class="tool-icon">🧭</div>
                 <div class="tool-title">Sector Reduction Pathways</div>
-                <div class="tool-desc">View top-down reduction opportunities by sector and region to identify the largest impacts.</div>
+                <div class="tool-desc">Top-down reduction opportunities by sector and region.</div>
             </div>
         </a>
         """,
         unsafe_allow_html=True
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
+with top2:
     st.markdown(
-    """
+        """
+        <a href="/Abatement_Curve" target="_self" style="text-decoration: none; display: block;">
+            <div class="tool-card">
+                <div class="tool-icon">📉</div>
+                <div class="tool-title">Abatement Curve</div>
+                <div class="tool-desc">Bottom-up reduction potential comparing ERS by difficulty and scale.</div>
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+
+with top3:
+    st.markdown(
+        """
         <a href="/Heat_Map" target="_self" style="text-decoration: none; display: block;">
-            <div class="tool-card"
-                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">🌡️</div>
+            <div class="tool-card">
+                <div class="tool-icon">🌡️</div>
                 <div class="tool-title">Heat Map</div>
-                <div class="tool-desc">Pinpoint geographic hotspots of reduction potential across sectors and regions.</div>
+                <div class="tool-desc">Geographic hotspots of reduction potential across sectors and regions.</div>
             </div>
         </a>
         """,
         unsafe_allow_html=True
     )
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
 
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ---- 3-column grid: bottom row ----
+bot1, bot2, bot3 = st.columns(3, gap="medium")
+
+with bot1:
     st.markdown(
-    """
+        """
+        <a href="/Global_Trends" target="_self" style="text-decoration: none; display: block;">
+            <div class="tool-card">
+                <div class="tool-icon">🌍</div>
+                <div class="tool-title">Global Trends</div>
+                <div class="tool-desc">Explore emissions change drivers by geography and sector.</div>
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+
+with bot2:
+    st.markdown(
+        """
         <a href="/Ownership" target="_self" style="text-decoration: none; display: block;">
-            <div class="tool-card"
-                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">🗂️</div>
+            <div class="tool-card">
+                <div class="tool-icon">🗂️</div>
                 <div class="tool-title">Ownership</div>
                 <div class="tool-desc">Identify owners and evaluate their asset portfolios.</div>
-            </div>
-        </a>
-        """,
-        unsafe_allow_html=True
-    )
-
-with col2:
-
-    st.markdown(
-    """
-        <a href="/Abatement_Curve" target="_self" style="text-decoration: none; display: block;">
-            <div class="tool-card"
-                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">📉</div>
-                <div class="tool-title">Abatement Curve</div>
-                <div class="tool-desc">View bottom-up reduction potential to compare ERS by difficulty and scale.</div>
-            </div>
-        </a>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown(
-    """
-        <a href="/Monthly_Trends" target="_self" style="text-decoration: none; display: block;">
-            <div class="tool-card"
-                style="min-height: 200px; padding: 35px 25px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <div class="tool-icon" style="font-size: 6rem;">📊</div>
-                <div class="tool-title">Monthly Trends</div>
-                <div class="tool-desc">Track month-over-month emissions patterns and sector activity worldwide.</div>
             </div>
         </a>
         """,

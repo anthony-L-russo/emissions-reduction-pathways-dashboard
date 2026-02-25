@@ -41,6 +41,7 @@ def show_emissions_reduction_plan():
     gadm_1_path = CONFIG['gadm_1_path']
     gadm_2_path = CONFIG['gadm_2_path']
     country_subsector_totals_path = CONFIG['country_subsector_totals_path']
+    country_subsector_stats_path = CONFIG['country_subsector_stats_path']
     percentile_path = CONFIG['percentile_path']
     region_options = CONFIG['region_options']
     gadm_0_path = CONFIG['gadm_0_path']
@@ -424,6 +425,7 @@ def show_emissions_reduction_plan():
     st.markdown("<br>", unsafe_allow_html=True)
 
     where_clauses = []
+    where_clauses.append("subsector <> 'net-soil-organic-carbon'")
     if selected_region == "Global":
         table = gadm_0_path
         where_clauses.append("gas = 'co2e_100yr'")
@@ -1196,7 +1198,7 @@ def show_emissions_reduction_plan():
                                     exclude_forestry
                                 )
         
-        print(country_subsector_ef_sql)
+        # print(country_subsector_ef_sql)
         country_subsector_ef_download_df = con.execute(country_subsector_ef_sql).df()
 
     if not use_ct_ers:

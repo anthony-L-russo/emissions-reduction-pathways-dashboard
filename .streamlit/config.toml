@@ -5,3 +5,6 @@ enableCORS = false
 address = "0.0.0.0"
 fileWatcherType = "none"
 runOnSave = true
+
+[client]
+showSidebarNavigation = false
