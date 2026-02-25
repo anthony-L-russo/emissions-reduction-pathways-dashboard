@@ -8,7 +8,7 @@ from utils.utils import get_release_version
 from tabs.tab02_abatement_curve_tab import show_abatement_curve
 #from tabs.tab06_reduction_heatmap import show_reduction_heatmap
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 st.markdown(
     """
     <style>

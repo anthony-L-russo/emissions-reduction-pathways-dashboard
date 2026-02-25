@@ -8,7 +8,7 @@ from tabs.tab01_emissions_reduction_tab import show_emissions_reduction_plan
 # from tabs.tab02_abatement_curve_tab import show_abatement_curve
 # from tabs.tab06_reduction_heatmap import show_reduction_heatmap
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 st.markdown(
     """
     <style>

@@ -1,7 +1,7 @@
 import streamlit as st
 import base64
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
