@@ -6,7 +6,7 @@ from config import CONFIG
 from utils.utils import get_release_version
 from tabs.tab07_monthly_trends_v2 import show_monthly_trends_v2
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 st.markdown(
     """
     <style>

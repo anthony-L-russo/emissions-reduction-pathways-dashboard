@@ -6,7 +6,7 @@ from config import CONFIG
 from utils.utils import get_release_version
 from tabs.tab03_monthly_dashboard_tab import show_monthly_dashboard
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 st.markdown(
     """
     <style>
