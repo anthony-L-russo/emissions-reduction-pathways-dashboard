@@ -36,8 +36,8 @@ def format_dropdown_options(raw_values, lowercase_words=None):
 
 
 # function finds us the correct column and value to use as a condition based on the dropdown selection
-def map_region_condition(region_selection, country_map=None):
-    
+def map_region_condition(region_selection, country_map=None, subregion_list=None):
+
     list_of_continents = ['Africa',
                           'Antarctica',
                           'Asia',
@@ -45,7 +45,7 @@ def map_region_condition(region_selection, country_map=None):
                           'North America',
                           'Oceania',
                           'South America']
-    
+
     region_mapping = {
         'EU': {
             'column_name': 'eu',
@@ -91,19 +91,26 @@ def map_region_condition(region_selection, country_map=None):
 
     if region_selection == 'Global':
         return None
-    
+
     elif region_selection in list_of_continents:
         return {
             'column_name': 'continent',
             'column_value': region_selection
         }
-    
+
     elif region_selection in region_mapping:
         return region_mapping[region_selection]
-    
+
+    elif subregion_list and region_selection in subregion_list:
+        return {
+            'column_name': 'iso3_country',
+            'column_value': region_selection,
+            'is_subregion': True
+        }
+
     else:
         return {
-                'column_name': 'iso3_country', 
+                'column_name': 'iso3_country',
                 'column_value': country_map.get(region_selection)
         }
     
