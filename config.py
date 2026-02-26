@@ -16,6 +16,7 @@ CONFIG = {
     "demographic_path": "data/demographic/*.parquet",
     "heatmap_global_totals_path": "data/heatmap_global_inventory_view/global_heatmap_emissions_totals.parquet",
     "heatmap_global_country_path": "data/heatmap_global_inventory_view/global_heatmap_emissions_country.parquet",
+    "country_region_mapping_path": "data/country_region_mapping/country_region_mapping.parquet",
     "region_options": [
         'Global', 'EU', 'OECD', 'Non-OECD',
         'UNFCCC Annex', 'UNFCCC Non-Annex', 'G20',
@@ -23,5 +24,28 @@ CONFIG = {
         'Developed Markets', 'Emerging Markets',
         'Africa', 'Antarctica', 'Asia', 'Europe',
         'North America', 'Oceania', 'South America'
+    ],
+    "subregion_options": [
+        'Australia and New Zealand',
+        'Caribbean',
+        'Central America',
+        'Central Asia',
+        'Eastern Africa',
+        'Eastern Asia',
+        'Eastern Europe',
+        'Melanesia',
+        'Micronesia',
+        'Middle Africa',
+        'Northern Africa',
+        'Northern America',
+        'Northern Europe',
+        'Polynesia',
+        'South-eastern Asia',
+        'Southern Africa',
+        'Southern Asia',
+        'Southern Europe',
+        'Western Africa',
+        'Western Asia',
+        'Western Europe'
     ]
 }

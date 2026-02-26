@@ -56,7 +56,12 @@ def show_monthly_trends_v2():
     country_subsector_totals_path = CONFIG['country_subsector_totals_path']
     asset_path = CONFIG['asset_emissions_country_subsector_path']
     gadm_0_path = CONFIG['gadm_0_path']
-    region_options = [r for r in CONFIG['region_options'] if r != 'G20']
+    region_options = (
+        [r for r in CONFIG['region_options'] if r != 'G20']
+        + CONFIG['subregion_options']
+    )
+    
+    country_region_path = CONFIG['country_region_mapping_path']
 
     flag_df = get_iso3_flag_table()
 
@@ -133,7 +138,7 @@ def show_monthly_trends_v2():
         )
 
 
-        region_condition = map_region_condition(selected_scope, {})
+        region_condition = map_region_condition(selected_scope, {}, subregion_list=CONFIG['subregion_options'])
 
     with col_month:
         if is_inventory_view:
@@ -240,17 +245,35 @@ def show_monthly_trends_v2():
             shades.append(hex_color)
         return shades
 
+    # Pre-compute subregion ISO3 list (if a subregion is selected)
+    is_subregion = region_condition and region_condition.get('is_subregion', False)
+
+    if is_subregion:
+        _subregion_iso3 = _cached_df(f"""
+            SELECT iso3_country FROM '{country_region_path}'
+            WHERE region = '{selected_scope}'
+        """)['iso3_country'].tolist()
+        _subregion_in_clause = "iso3_country IN (" + ", ".join(f"'{c}'" for c in _subregion_iso3) + ")"
+    else:
+        _subregion_in_clause = None
+
+    def _add_region_filter(where_clauses):
+        """Append the appropriate region/subregion filter to a WHERE clause list."""
+        if is_subregion:
+            where_clauses.append(_subregion_in_clause)
+        elif region_condition:
+            col = region_condition['column_name']
+            val = region_condition['column_value']
+            if isinstance(val, bool):
+                where_clauses.append(f"{col} = {str(val).upper()}")
+            else:
+                where_clauses.append(f"{col} = '{val}'")
+
     # Get emissions columns from the stats data
     # Build WHERE clause based on region selection
     where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-    if region_condition:
-        column_name = region_condition['column_name']
-        column_value = region_condition['column_value']
-        if isinstance(column_value, bool):
-            where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-        else:
-            where_clauses.append(f"{column_name} = '{column_value}'")
+    _add_region_filter(where_clauses)
 
     where_clause = " AND ".join(where_clauses)
 
@@ -299,13 +322,7 @@ def show_monthly_trends_v2():
             f"month <= {latest_month}"
         ]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                ytd_global_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                ytd_global_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(ytd_global_where_clauses)
 
         ytd_global_where_clause = " AND ".join(ytd_global_where_clauses)
 
@@ -374,13 +391,7 @@ def show_monthly_trends_v2():
                     f"year IN ({inventory_year - 1}, {inventory_year})",
                     f"month <= {latest_month}"
                 ]
-                if region_condition:
-                    rc_col = region_condition['column_name']
-                    rc_val = region_condition['column_value']
-                    if isinstance(rc_val, bool):
-                        ytd_global_where_clauses.append(f"{rc_col} = {str(rc_val).upper()}")
-                    else:
-                        ytd_global_where_clauses.append(f"{rc_col} = '{rc_val}'")
+                _add_region_filter(ytd_global_where_clauses)
                 ytd_global_where_clause = " AND ".join(ytd_global_where_clauses)
                 df_ytd = _cached_df(f"""
                     SELECT year, month, SUM(emissions_quantity) AS emissions_quantity
@@ -482,13 +493,7 @@ def show_monthly_trends_v2():
             f"month <= {latest_month}"
         ]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                country_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                country_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(country_ytd_where_clauses)
 
         country_ytd_where_clause = " AND ".join(country_ytd_where_clauses)
 
@@ -539,13 +544,7 @@ def show_monthly_trends_v2():
                 f"year IN ({inventory_year - 1}, {inventory_year})",
                 f"month <= {latest_month}"
             ]
-            if region_condition:
-                rc_col = region_condition['column_name']
-                rc_val = region_condition['column_value']
-                if isinstance(rc_val, bool):
-                    inv_ctry_where.append(f"{rc_col} = {str(rc_val).upper()}")
-                else:
-                    inv_ctry_where.append(f"{rc_col} = '{rc_val}'")
+            _add_region_filter(inv_ctry_where)
             df_ctry_ytd = _cached_df(f"""
                 SELECT country_name, year, month, SUM(emissions_quantity) AS emissions_quantity
                 FROM '{country_subsector_totals_path}'
@@ -564,13 +563,7 @@ def show_monthly_trends_v2():
         # Build WHERE clause for region filter
         country_totals_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                country_totals_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                country_totals_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(country_totals_where_clauses)
 
         country_totals_where_clause = " AND ".join(country_totals_where_clauses)
 
@@ -794,13 +787,7 @@ def show_monthly_trends_v2():
             f"month <= {latest_month}"
         ]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                sector_card_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                sector_card_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(sector_card_ytd_where_clauses)
 
         sector_card_ytd_where_clause = " AND ".join(sector_card_ytd_where_clauses)
 
@@ -851,13 +838,7 @@ def show_monthly_trends_v2():
         # Build WHERE clause for region filter
         sector_card_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                sector_card_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                sector_card_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(sector_card_where_clauses)
 
         sector_card_where_clause = " AND ".join(sector_card_where_clauses)
 
@@ -894,13 +875,7 @@ def show_monthly_trends_v2():
             f"month <= {latest_month}"
         ]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                subsector_card_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                subsector_card_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(subsector_card_ytd_where_clauses)
 
         subsector_card_ytd_where_clause = " AND ".join(subsector_card_ytd_where_clauses)
 
@@ -952,13 +927,7 @@ def show_monthly_trends_v2():
         # Build WHERE clause for region filter
         subsector_card_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-        if region_condition:
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                subsector_card_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                subsector_card_where_clauses.append(f"{column_name} = '{column_value}'")
+        _add_region_filter(subsector_card_where_clauses)
 
         subsector_card_where_clause = " AND ".join(subsector_card_where_clauses)
 
@@ -1109,13 +1078,7 @@ def show_monthly_trends_v2():
                 f"month <= {latest_month}"
             ]
 
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    sector_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    sector_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+            _add_region_filter(sector_ytd_where_clauses)
 
             sector_ytd_where_clause = " AND ".join(sector_ytd_where_clauses)
 
@@ -1167,13 +1130,7 @@ def show_monthly_trends_v2():
             # Build WHERE clause for region filter
             movers_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    movers_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    movers_where_clauses.append(f"{column_name} = '{column_value}'")
+            _add_region_filter(movers_where_clauses)
 
             movers_where_clause = " AND ".join(movers_where_clauses)
 
@@ -1524,13 +1481,7 @@ def show_monthly_trends_v2():
                 f"month <= {latest_month}"
             ]
 
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+            _add_region_filter(ytd_where_clauses)
 
             ytd_where_clause = " AND ".join(ytd_where_clauses)
 
@@ -1583,13 +1534,7 @@ def show_monthly_trends_v2():
             # Build WHERE clause for region filter
             country_movers_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
 
-            if region_condition:
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    country_movers_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    country_movers_where_clauses.append(f"{column_name} = '{column_value}'")
+            _add_region_filter(country_movers_where_clauses)
 
             country_movers_where_clause = " AND ".join(country_movers_where_clauses)
 
@@ -1891,13 +1836,7 @@ def show_monthly_trends_v2():
 
     # Build WHERE clause with region filter
     rank_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL",]
-    if region_condition:
-        rc_col = region_condition['column_name']
-        rc_val = region_condition['column_value']
-        if isinstance(rc_val, bool):
-            rank_where_clauses.append(f"{rc_col} = {str(rc_val).upper()}")
-        else:
-            rank_where_clauses.append(f"{rc_col} = '{rc_val}'")
+    _add_region_filter(rank_where_clauses)
 
     # Query data based on trend_view - unified for both rank metrics
     if trend_view == "Year-to-Date YoY":
@@ -2213,6 +2152,13 @@ def show_monthly_trends_v2():
         # Filter countries based on selected region
         if selected_scope == 'Global':
             available_countries = all_countries
+        elif is_subregion:
+            region_filter_sql = _subregion_in_clause
+
+            region_countries = _cached_fetchall(
+                "SELECT DISTINCT country_name FROM '" + country_subsector_totals_path + "' WHERE " + ts_country_base_filter + " AND " + region_filter_sql + " AND country_name <> 'Unknown' " + " ORDER BY country_name"
+            )
+            available_countries = [row[0] for row in region_countries]
         elif region_condition:
             region_col = region_condition['column_name']
             region_val = region_condition['column_value']
@@ -2302,13 +2248,8 @@ def show_monthly_trends_v2():
 
         # --- Build shared WHERE clauses ---
         dd_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
-        if region_condition and selected_country == "All Countries":
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                dd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                dd_where_clauses.append(f"{column_name} = '{column_value}'")
+        if (region_condition or is_subregion) and selected_country == "All Countries":
+            _add_region_filter(dd_where_clauses)
         elif selected_country != "All Countries":
             dd_where_clauses.append(f"country_name = '{selected_country}'")
         if selected_sector_dd != "All Sectors":
@@ -2343,13 +2284,8 @@ def show_monthly_trends_v2():
             f"year IN ({latest_year - 1}, {latest_year})",
             f"month <= {latest_month}"
         ]
-        if region_condition and selected_country == "All Countries":
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                dd_ytd_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                dd_ytd_where_clauses.append(f"{column_name} = '{column_value}'")
+        if (region_condition or is_subregion) and selected_country == "All Countries":
+            _add_region_filter(dd_ytd_where_clauses)
         elif selected_country != "All Countries":
             dd_ytd_where_clauses.append(f"country_name = '{selected_country}'")
         if selected_sector_dd != "All Sectors":
@@ -2379,13 +2315,8 @@ def show_monthly_trends_v2():
 
         if show_activity_and_ef_cards:
             asset_where_clauses = ["gas = 'co2e_100yr'"]
-            if region_condition and selected_country == "All Countries":
-                column_name = region_condition['column_name']
-                column_value = region_condition['column_value']
-                if isinstance(column_value, bool):
-                    asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-                else:
-                    asset_where_clauses.append(f"{column_name} = '{column_value}'")
+            if (region_condition or is_subregion) and selected_country == "All Countries":
+                _add_region_filter(asset_where_clauses)
             elif selected_country != "All Countries":
                 asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
             if selected_sector_dd != "All Sectors":
@@ -2639,13 +2570,8 @@ def show_monthly_trends_v2():
         ]
 
         # Add region/country filter
-        if region_condition and selected_country == "All Countries":
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                ts_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                ts_where_clauses.append(f"{column_name} = '{column_value}'")
+        if (region_condition or is_subregion) and selected_country == "All Countries":
+            _add_region_filter(ts_where_clauses)
         elif selected_country != "All Countries":
             ts_where_clauses.append(f"country_name = '{selected_country}'")
 
@@ -2678,13 +2604,8 @@ def show_monthly_trends_v2():
         ts_asset_where_clauses = ["gas = 'co2e_100yr'"]
 
         # Add region/country filter
-        if region_condition and selected_country == "All Countries":
-            column_name = region_condition['column_name']
-            column_value = region_condition['column_value']
-            if isinstance(column_value, bool):
-                ts_asset_where_clauses.append(f"{column_name} = {str(column_value).upper()}")
-            else:
-                ts_asset_where_clauses.append(f"{column_name} = '{column_value}'")
+        if (region_condition or is_subregion) and selected_country == "All Countries":
+            _add_region_filter(ts_asset_where_clauses)
         elif selected_country != "All Countries":
             ts_asset_where_clauses.append(f"iso3_country = '{selected_country_iso3}'")
 
@@ -2855,6 +2776,8 @@ def show_monthly_trends_v2():
         "time_period_desc": time_period_desc,
         "selected_scope": selected_scope,
         "region_condition": region_condition,
+        "is_subregion": is_subregion,
+        "subregion_in_clause": _subregion_in_clause,
         "sector_breakout": sector_breakout,
         "country_breakout": country_breakout,
         "rank_metric": rank_metric,
@@ -3074,7 +2997,9 @@ def show_monthly_trends_v2():
                         if selections["raw"]:
                             raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
                             rc = data_dict["region_condition"]
-                            if rc:
+                            if data_dict.get("is_subregion") and data_dict.get("subregion_in_clause"):
+                                raw_where.append(data_dict["subregion_in_clause"])
+                            elif rc:
                                 if isinstance(rc["column_value"], bool):
                                     raw_where.append(f"{rc['column_name']} = {str(rc['column_value']).upper()}")
                                 else:
