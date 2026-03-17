@@ -187,7 +187,8 @@ def show_abatement_curve():
                     def duckdb_safe_val(v):
                         if isinstance(v, bool):
                             return "TRUE" if v else "FALSE"
-                        return f"'{str(v).replace("'", "''")}'"
+                        safe_v = str(v).replace("'", "''")
+                        return f"'{safe_v}'"
 
 
                     if isinstance(val, list):

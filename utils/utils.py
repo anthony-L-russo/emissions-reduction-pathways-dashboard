@@ -1002,7 +1002,7 @@ def plot_abatement_curve(gdf_asset, selected_group, selected_color, dict_color, 
     elif selected_x == 'net_reduction_potential':
         x_axis_title = 'Emissions Reduction Potential (t of CO2e)'
     elif selected_x == 'activity':
-        x_axis_title = f'Activity ({df['activity_units'].iloc[-1]})'
+        x_axis_title = f"Activity ({df['activity_units'].iloc[-1]})"
 
     # change values based on y-axis
     if selected_y == 'emissions_quantity':
