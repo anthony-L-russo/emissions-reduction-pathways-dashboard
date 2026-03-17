@@ -170,9 +170,10 @@ def show_emissions_reduction_plan():
             )
         else:
             if selected_state_province and not selected_state_province.startswith("--"):
+                safe_state = selected_state_province.replace("'", "''")
                 county_district_options = ['-- Select County / District --'] + sorted(
                     row[0] for row in con.execute(
-                        f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE gadm_1_name = '{selected_state_province.replace("'", "''")}'"
+                        f"SELECT DISTINCT gadm_2_name FROM '{gadm_2_path}' WHERE gadm_1_name = '{safe_state}'"
                     ).fetchall()
                 )
             elif col and val is not None:
@@ -218,7 +219,8 @@ def show_emissions_reduction_plan():
             def duckdb_safe_val(v):
                 if isinstance(v, bool):
                     return "TRUE" if v else "FALSE"
-                return f"'{str(v).replace("'", "''")}'"
+                safe_v = str(v).replace("'", "''")
+                return f"'{safe_v}'"
 
             if isinstance(val, list):
                 val_str = "(" + ", ".join([duckdb_safe_val(v) for v in val]) + ")"
@@ -1028,7 +1030,7 @@ def show_emissions_reduction_plan():
         ### A possible {display_region_text if display_region_text != 'Global' else 'Global'} Emissions Reduction Plan
 
         <div style="border: 1px solid rgba(100,100,100,0.3); padding: 0px 18px 10px 18px; border-radius: 6px; font-size: 16px; line-height: 1.4;">
-            <p style="margin-top: 0px;">{reduction_text.replace('\n', '<br>')}</p>
+            <p style="margin-top: 0px;">{reduction_text.replace(chr(10), '<br>')}</p>
         </div>
     """, unsafe_allow_html=True)
 
