@@ -66,14 +66,16 @@ streamlit run app.py
 │   ├── 2_Abatement_Curve.py
 │   ├── 3_Heat_Map.py
 │   ├── 4_Monthly_Trends.py
-│   └── 5_Ownership.py
+│   ├── 5_Ownership.py
+│   └── 6_Global_Trends.py
 ├── tabs/                   # Reusable visualization components
 │   ├── tab01_emissions_reduction_tab.py
 │   ├── tab02_abatement_curve_tab.py
 │   ├── tab03_monthly_dashboard_tab.py
 │   ├── tab04_asset_ownership.py
 │   ├── tab05_abatement_curve_demo.py
-│   └── tab06_reduction_heatmap.py
+│   ├── tab06_reduction_heatmap.py
+│   └── tab07_monthly_trends_v2.py  # Backs 6_Global_Trends.py
 ├── utils/                  # Helper modules
 │   ├── queries.py         # SQL query builders
 │   ├── run_sql.py         # PostgreSQL connection
@@ -92,8 +94,9 @@ streamlit run app.py
 ### Key Design Patterns
 
 - **Query Building**: Dynamic SQL generation in `utils/queries.py` based on user selections (region, sector, year)
-- **Region Mapping**: `utils.py` contains `map_region_condition()` which maps UI selections to database columns/values
-- **DuckDB Integration**: Used for fast local queries on parquet files without loading full datasets into memory
+- **Region Mapping**: `utils.py` contains `map_region_condition()` which maps UI selections to database columns/values. It returns a dict with `column_name`, `column_value`, and optionally `is_subregion: True` for UN subregion selections. Subregions require a JOIN against `data/country_region_mapping/country_region_mapping.parquet` — they cannot be filtered with a simple `column = value` clause. Pass `subregion_list=CONFIG['subregion_options']` to enable subregion detection.
+- **`is_country()` limitation**: `utils.py:is_country()` only has a hardcoded exclusion list (continents, blocs). Subregion names are not in that list so `is_country()` incorrectly returns `True` for them. Check for `is_subregion` from `map_region_condition()` instead when subregion awareness is needed.
+- **DuckDB Caching** (`tab07`): All DuckDB calls go through three module-level `@st.cache_data(ttl=3600)` helpers — `_cached_df(sql)`, `_cached_fetchone(sql)`, `_cached_fetchall(sql)`. The SQL string is the cache key. Use this pattern in any new tab that queries parquet files to avoid re-running queries on every widget interaction.
 - **Streamlit Pages**: Each page in `pages/` corresponds to a different analytical view
 
 ## Data Pipeline
@@ -237,4 +240,6 @@ sql = f"SELECT * FROM '{CONFIG['asset_path']}'"
 
 - **Docker**: Multi-stage build defined in `Dockerfile` for efficient production images.
 
-- **Streamlit config**: `.streamlit/config.toml` sets headless mode, port 8501, and disables CORS for deployment.
+- **Streamlit config**: `.streamlit/config.toml` sets headless mode, port 8501, disables CORS for deployment, and sets `[client] showSidebarNavigation = false`. All pages also set `initial_sidebar_state="collapsed"` in `st.set_page_config()` — both are required to prevent the sidebar from flashing on page navigation.
+
+- **Known syntax error**: `utils/utils.py` ~line 1005 has a nested-quote f-string bug inside `plot_abatement_curve()` — outer quotes are single quotes but the expression uses `df['activity_units']`. This function is used by the abatement curve tabs, not tab07.
