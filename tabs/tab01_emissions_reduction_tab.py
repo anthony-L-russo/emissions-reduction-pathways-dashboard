@@ -45,6 +45,7 @@ def show_emissions_reduction_plan():
     percentile_path = CONFIG['percentile_path']
     region_options = CONFIG['region_options']
     gadm_0_path = CONFIG['gadm_0_path']
+    ers_baseline_year = CONFIG['ers_baseline_year']
 
     con = duckdb.connect()
 
@@ -55,7 +56,7 @@ def show_emissions_reduction_plan():
     country_map = {row[0]: row[1] for row in country_rows}
     unique_countries = list(country_map.keys())
 
-    selected_year = 2024
+    selected_year = ers_baseline_year
     
     # st.markdown("<br>", unsafe_allow_html=True)
 
@@ -83,15 +84,6 @@ def show_emissions_reduction_plan():
     #     )
 
     reduction_method = "Climate TRACE Solutions"
-
-    # with year_col:
-    #     st.text_input(
-    #         label="", 
-    #         value=" Data Year:  2024", 
-    #         disabled=True, 
-    #         key="static_year_RO",
-    #         on_change=mark_ro_recompute
-    #     )
 
     # st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1054,7 +1046,7 @@ def show_emissions_reduction_plan():
     asset_sorting_help = ("**Net Reduction Potential:** Top 100 assets by net emissions reduction potential, "
         "including emissions induced in other sectors from executing the respective reduction strategy.\n\n"
         "**Asset Reduction Potential:** Top 100 assets by direct emissions reduction at the asset alone.\n\n"
-        "**Asset Annual Emissions:** Top 100 highest emitting assets by annual (2024) emissions.")
+        "**Asset Annual Emissions:** Top 100 highest emitting assets by annual (2025) emissions.")
 
     if use_ct_ers is True:
         sorting_options = [
@@ -1116,8 +1108,9 @@ def show_emissions_reduction_plan():
     asset_table_df['country_url'] = asset_table_df.apply(make_country_url, axis=1)
     
 
-    # Current (2024) Estimate
-    asset_table_df["2024 Emissions (tCO2e)"] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
+    # Current Estimate
+    baseline_year_col_name = f'''{ers_baseline_year} Emissions (tCO2e)'''
+    asset_table_df[baseline_year_col_name] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
     asset_table_df["Asset Reduction Potential Per Year (tCO2e)"] = asset_table_df["emissions_reduction_potential"].fillna(0).apply(lambda x: f"{round(x):,}")
 
     if use_ct_ers is True:
@@ -1127,14 +1120,14 @@ def show_emissions_reduction_plan():
                                          'subsector',
                                          'asset_type',
                                          'strategy_name',
-                                         '2024 Emissions (tCO2e)',
+                                         baseline_year_col_name,
                                          'Asset Reduction Potential Per Year (tCO2e)',
                                          'total_emissions_reduced_per_year']]
         
         asset_table_df["Net Reduction Potential Per Year (tCO2e)"]  = asset_table_df["total_emissions_reduced_per_year"].apply(lambda x: f"{round(x):,}")
         asset_table_df = asset_table_df.drop(columns=["total_emissions_reduced_per_year"])
         styled_df = asset_table_df.style.applymap(
-        lambda val: "color: red", subset=["2024 Emissions (tCO2e)"]
+        lambda val: "color: red", subset=[baseline_year_col_name]
             ).applymap(
                 lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)",
                                                     "Net Reduction Potential Per Year (tCO2e)"]
@@ -1145,11 +1138,11 @@ def show_emissions_reduction_plan():
                                          'sector',
                                          'subsector',
                                          'asset_type',
-                                         '2024 Emissions (tCO2e)',
+                                         baseline_year_col_name,
                                          'Asset Reduction Potential Per Year (tCO2e)']]
         
         styled_df = asset_table_df.style.applymap(
-            lambda val: "color: red", subset=["2024 Emissions (tCO2e)"]
+            lambda val: "color: red", subset=[baseline_year_col_name]
                 ).applymap(
                     lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)"]
                 )

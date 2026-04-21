@@ -154,7 +154,7 @@ def show_monthly_trends_v2():
                     key="inventory_year_selector",
                 )
 
-            latest_full_inventory_year = CONFIG['latest_full_inventory_year']
+            latest_full_inventory_year = CONFIG['latest_inventory_year']
             is_full_year = (inventory_year <= latest_full_inventory_year)
 
             # Column names for selected year and comparison year

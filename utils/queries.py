@@ -3,7 +3,9 @@ import io
 import streamlit as st
 import html
 import numpy as np
+from config import CONFIG
 
+ers_baseline_year = CONFIG['ers_baseline_year']
 
 '''
 This builds SQL for the pie chart on Reduction Opportunities tab. This will
@@ -1433,7 +1435,7 @@ def get_ownership_sql(annual_asset_path, ownership_path):
     LEFT JOIN '{annual_asset_path}' ae
         ON ao.asset_id = ae.asset_id
     WHERE
-        ae.year = 2024
+        ae.year = {ers_baseline_year}
         AND ae.reduction_q_type = 'asset'
     GROUP BY
         ao.asset_id,
@@ -1475,7 +1477,7 @@ def get_gadm_emissions_sql(gadm_0_path):
         SUM(ge.asset_emissions) AS emissions_quantity,
     FROM '{gadm_0_path}' ge
     WHERE
-        ge.year = 2024
+        ge.year = {ers_baseline_year}
         AND ge.gas = 'co2e_100yr'
     GROUP BY
         ge.iso3_country,
