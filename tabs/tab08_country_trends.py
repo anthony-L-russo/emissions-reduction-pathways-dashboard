@@ -4,7 +4,7 @@ import duckdb
 import pandas as pd
 import plotly.graph_objects as go
 from config import CONFIG
-from utils.utils import get_iso3_flag_table
+from utils.utils import get_iso3_flag_table, format_number_short
 
 SECTOR_COLORS = {
     'power':                  '#56979F',
@@ -78,15 +78,6 @@ def _shade_hex(hex_color, amount):
     return f'#{r:02x}{g:02x}{b:02x}'
 
 
-def _fmt_mt(mt):
-    if abs(mt) >= 1000:
-        return f"{mt / 1000:.1f}k"
-    elif abs(mt) >= 1:
-        return f"{mt:.1f}"
-    elif abs(mt) >= 0.001:
-        return f"{mt:.3f}"
-    return "~0"
-
 
 def _fmt_ef(ef):
     """Format an emissions factor value."""
@@ -103,15 +94,15 @@ def _fmt_ef(ef):
 
 def _pct_str(val):
     if val is None or (isinstance(val, float) and pd.isna(val)):
-        return '<span style="color:#999">—</span>'
-    color = '#2e7d32' if val < 0 else '#c62828'
+        return '<span style="color:var(--text-color);opacity:0.4">—</span>'
+    color = '#5cb85c' if val < 0 else '#d9534f'
     sign = '+' if val > 0 else ''
     return f'<span style="color:{color};font-weight:600">{sign}{val:.1f}%</span>'
 
 
 def _rank_badge_html(rank, total=None):
     if rank is None:
-        return '<span style="color:#999">—</span>'
+        return '<span style="color:var(--text-color);opacity:0.4">—</span>'
     rank = int(rank)
     cls = "ct-rank-top3" if rank <= 3 else ("ct-rank-top10" if rank <= 10 else "ct-rank-other")
     total_str = f" of {int(total)}" if total is not None else ""
@@ -131,37 +122,48 @@ _TABLE_CSS = """
 .ct-table-scroll { overflow-x: auto; }
 table.ct-metrics { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.ct-metrics thead tr th {
-    background: #f5f6f8; padding: 3px 8px; white-space: nowrap;
-    border-bottom: 2px solid #dde1ea; text-align: center;
-    font-weight: 600; color: #555d72; font-size: 12px;
+    background: rgba(128,128,128,0.07);
+    padding: 3px 8px; white-space: nowrap;
+    border-bottom: 2px solid var(--border-color, rgba(128,128,128,0.3));
+    text-align: center;
+    font-weight: 600; color: var(--text-color); font-size: 12px;
 }
 table.ct-metrics thead tr th:first-child { text-align: left; min-width: 160px; }
 table.ct-metrics tbody tr td {
     padding: 3px 8px; text-align: center;
-    border-bottom: 1px solid #f0f2f5; color: #3a4158; white-space: nowrap;
+    border-bottom: 1px solid var(--border-color, rgba(128,128,128,0.2));
+    color: var(--text-color); white-space: nowrap;
 }
 table.ct-metrics tbody tr td:first-child {
-    text-align: left; font-weight: 600; color: #555d72;
-    font-size: 12px; border-right: 1px solid #eaecf0;
+    text-align: left; font-weight: 600; color: var(--text-color);
+    font-size: 12px; border-right: 1px solid var(--border-color, rgba(128,128,128,0.2));
 }
-table.ct-metrics tbody tr:hover td { background: #f7f9fb; }
+table.ct-metrics tbody tr:hover td { background: rgba(128,128,128,0.06); }
 .ct-col-header { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .ct-col-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .ct-rank-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 700; }
-.ct-rank-top3  { background: #fff3e0; color: #e65100; }
-.ct-rank-top10 { background: #e8f5e9; color: #2e7d32; }
-.ct-rank-other { background: #f3f4f6; color: #555d72; }
+.ct-rank-top3  { background: rgba(230, 81, 0, 0.15);  color: #ef6c00; }
+.ct-rank-top10 { background: rgba(56, 142, 60, 0.15); color: #388e3c; }
+.ct-rank-other { background: rgba(128, 128, 128, 0.12); color: var(--text-color); }
 .ct-pct-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.ct-pct-bar-bg { width: 52px; height: 4px; background: #eaecf0; border-radius: 2px; overflow: hidden; }
+.ct-pct-bar-bg { width: 52px; height: 4px; background: var(--border-color, rgba(128,128,128,0.2)); border-radius: 2px; overflow: hidden; }
 .ct-pct-bar-fill { height: 100%; border-radius: 2px; opacity: 0.75; }
 tr.ct-divider td {
     padding: 2px 8px; font-size: 12px; text-transform: uppercase;
-    letter-spacing: 0.5px; color: #b0b8c4;
-    background: #f9fafc; border-bottom: 1px solid #eaecf0;
+    letter-spacing: 0.5px; color: var(--text-color); opacity: 0.45;
+    background: rgba(128,128,128,0.07);
+    border-bottom: 1px solid var(--border-color, rgba(128,128,128,0.2));
 }
 .ct-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-.ct-summary-card { border-radius: 8px; padding: 12px 10px; text-align: center; border: 1px solid #eaecf0; background: #f8f9fb; }
-.ct-summary-label { font-size: 13px; font-weight: 700; color: #8892a4; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+.ct-summary-card {
+    border-radius: 8px; padding: 12px 10px; text-align: center;
+    border: 1px solid var(--border-color, rgba(128,128,128,0.2));
+    background: rgba(128,128,128,0.06);
+}
+.ct-summary-label {
+    font-size: 13px; font-weight: 700; color: var(--text-color);
+    text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;
+}
 .ct-summary-value { font-size: 22px; font-weight: 800; line-height: 1.15; }
 </style>
 """
@@ -214,14 +216,14 @@ def _build_sector_table(
     def divider(text):
         return f'<tr class="ct-divider"><td colspan="{len(col_keys) + 1}">{text}</td></tr>'
 
-    country_label = f'{country_flag} {iso3} (MtCO₂e)' if (country_flag and iso3) else '🏳 Country (MtCO₂e)'
+    country_label = f'{country_flag} {iso3} (tCO₂e)' if (country_flag and iso3) else '🏳 Country (tCO₂e)'
     rows_html = (
         row(country_label,
-            [f'<strong>{_fmt_mt(country_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
-        + row(f'🌐 {continent_name} (MtCO₂e)',
-              [f'<strong>{_fmt_mt(continent_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
-        + row('🌍 Global (MtCO₂e)',
-              [f'<strong>{_fmt_mt(global_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
+            [f'<strong>{format_number_short(country_vals.get(k, 0))}</strong>' for k in col_keys])
+        + row(f'🌐 {continent_name} (tCO₂e)',
+              [f'<strong>{format_number_short(continent_vals.get(k, 0))}</strong>' for k in col_keys])
+        + row('🌍 Global (tCO₂e)',
+              [f'<strong>{format_number_short(global_vals.get(k, 0))}</strong>' for k in col_keys])
         + row('% of Global', [
             (lambda pct, color: (
                 f'<div class="ct-pct-cell"><span>{pct:.1f}%</span>'
@@ -770,7 +772,7 @@ def show_country_trends():
             fig_pie = go.Figure(go.Pie(
                 labels=col_labels,
                 values=pie_vals_mt,
-                marker=dict(colors=col_colors, line=dict(color='white', width=2)),
+                marker=dict(colors=col_colors, line=dict(color='rgba(0,0,0,0)', width=2)),
                 hole=0.55,
                 domain=dict(x=[0, 0.58]),
                 textinfo='percent',
@@ -784,7 +786,7 @@ def show_country_trends():
                 pulls[col_keys.index(selected_subsector)] = 0.08
                 fig_pie.data[0].pull = pulls
             fig_pie.add_annotation(
-                text=f"<b>{_fmt_mt(total_mt)}</b><br>Mt total",
+                text=f"<b>{format_number_short(total_mt * 1e6)}</b><br>tCO₂e",
                 x=0.29, y=0.5, showarrow=False,
                 font=dict(size=13), align='center',
             )
@@ -888,13 +890,13 @@ def show_country_trends():
             accent = SECTOR_COLORS.get(selected_sector, '#4380F5') if selected_sector else '#4380F5'
             st.markdown(
                 f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px'>"
-                f"<div class='ct-summary-card' style='border-top:3px solid #555d72'>"
+                f"<div class='ct-summary-card' style='border-top:3px solid rgba(128,128,128,0.5)'>"
                 f"<div class='ct-summary-label'>Inventory</div>"
-                f"<div class='ct-summary-value' style='color:#555d72'>{_fmt_mt(total_inv / 1e6)} Mt</div>"
+                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} t</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Reducible</div>"
-                f"<div class='ct-summary-value' style='color:#2e7d32'>{_fmt_mt(total_red / 1e6)} Mt</div>"
+                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} t</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
                 f"<div class='ct-summary-label'>Strategies</div>"
@@ -909,18 +911,18 @@ def show_country_trends():
             )
 
             items_html = """<style>
+details.ct-strat { color: var(--text-color); background: rgba(128,128,128,0.06); }
 details.ct-strat summary::-webkit-details-marker{display:none}
 details.ct-strat summary::after{
-    content:'▶';font-size:11px;color:#aaa;margin-left:8px;
+    content:'▶';font-size:11px;color:var(--text-color);opacity:0.4;margin-left:8px;
     display:inline-block;transition:transform 0.2s;flex-shrink:0;
 }
-details.ct-strat[open] summary::after{transform:rotate(90deg);color:#555;}
+details.ct-strat[open] summary::after{transform:rotate(90deg);}
 </style>"""
             for _, strat in reductions_df.iterrows():
-                inv_mt  = strat['inventory'] / 1e6
-                red_mt  = strat['reductions'] / 1e6
-                pct_red = (strat['reductions'] / strat['inventory'] * 100
-                           if strat['inventory'] > 0 else 0)
+                inv_t   = strat['inventory']
+                red_t   = strat['reductions']
+                pct_red = (red_t / inv_t * 100 if inv_t > 0 else 0)
                 n_assets  = int(strat['n_assets'])
                 sec_key   = strat['sector']
                 sub_key   = strat['subsector']
@@ -929,34 +931,34 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);color:#555;}
                 sub_label = sub_key.replace('-', ' ').title()
                 desc      = str(strat['description']).strip()
                 desc_html = (
-                    f"<p style='font-size:13px;color:#555;margin:6px 0 10px'>{desc}</p>"
+                    f"<p style='font-size:13px;margin:6px 0 10px'>{desc}</p>"
                     if desc and desc.lower() not in ('nan', 'none', '') else ''
                 )
                 items_html += (
                     f"<details class='ct-strat' style='"
                     f"border-left:4px solid {color};border-radius:0 8px 8px 0;"
-                    f"background:#f8f9fb;margin-bottom:6px;padding:0'>"
+                    f"margin-bottom:6px;padding:0'>"
                     f"<summary style='padding:9px 13px;cursor:pointer;font-size:13px;"
                     f"font-weight:600;display:flex;align-items:center;gap:8px'>"
                     f"<span>{strat['strategy_name']}</span>"
                     f"<span style='white-space:nowrap;color:#2e7d32;font-weight:700;margin-left:auto'>"
-                    f"{_fmt_mt(red_mt)} Mt &nbsp;−{pct_red:.1f}%</span>"
+                    f"{format_number_short(red_t)} t &nbsp;−{pct_red:.1f}%</span>"
                     f"</summary>"
                     f"<div style='padding:6px 13px 12px'>"
                     f"<div style='margin-bottom:8px'>"
                     f"<span style='background:{color}22;color:{color};border:1px solid {color}55;"
                     f"border-radius:10px;padding:2px 10px;font-size:12px;font-weight:700'>"
                     f"{sec_label}</span>"
-                    f"<span style='margin-left:7px;font-size:13px;color:#777'>{sub_label}</span>"
+                    f"<span style='margin-left:7px;font-size:13px'>{sub_label}</span>"
                     f"</div>"
                     f"{desc_html}"
-                    f"<div style='display:flex;gap:20px;font-size:13px;color:#555d72'>"
-                    f"<div><span style='font-weight:700;color:#3a4158'>Inventory</span>"
-                    f"<br>{_fmt_mt(inv_mt)} Mt</div>"
+                    f"<div style='display:flex;gap:20px;font-size:13px'>"
+                    f"<div><span style='font-weight:700'>Inventory</span>"
+                    f"<br>{format_number_short(inv_t)} t</div>"
                     f"<div><span style='font-weight:700;color:#2e7d32'>Reduction</span>"
-                    f"<br>{_fmt_mt(red_mt)} Mt"
+                    f"<br>{format_number_short(red_t)} t"
                     f" <span style='color:#2e7d32'>−{pct_red:.1f}%</span></div>"
-                    f"<div><span style='font-weight:700;color:#3a4158'>Assets</span>"
+                    f"<div><span style='font-weight:700'>Assets</span>"
                     f"<br>{n_assets:,}</div>"
                     f"</div></div></details>"
                 )
