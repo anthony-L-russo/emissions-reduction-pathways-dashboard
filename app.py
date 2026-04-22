@@ -165,6 +165,20 @@ with bot2:
         unsafe_allow_html=True
     )
 
+with bot3:
+    st.markdown(
+        """
+        <a href="/Country_Trends" target="_self" style="text-decoration: none; display: block;">
+            <div class="tool-card">
+                <div class="tool-icon">🌐</div>
+                <div class="tool-title">Country Trends</div>
+                <div class="tool-desc">Analyze a country's emissions profile and see how it compares globally.</div>
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+
 # ---- Footer ----
 # st.markdown(
 #     """
