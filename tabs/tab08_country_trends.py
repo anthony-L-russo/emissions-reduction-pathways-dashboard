@@ -92,6 +92,8 @@ def _fmt_ef(ef):
     """Format an emissions factor value."""
     if ef is None or (isinstance(ef, float) and pd.isna(ef)):
         return "—"
+    if ef >= 1000:
+        return f"{ef:,.3f}"
     if ef >= 1:
         return f"{ef:.3f}"
     elif ef >= 0.0001:
@@ -175,6 +177,7 @@ def _build_sector_table(
     continent_rank_map, continent_count_map,
     chg_vals, yoy_vals,
     from_year, to_year, continent_name,
+    iso3=None, country_flag=None,
     ef_country=None, ef_continent=None, ef_global=None, ef_units=None,
     ef_pct_map=None,
     highlighted_key=None,
@@ -211,13 +214,14 @@ def _build_sector_table(
     def divider(text):
         return f'<tr class="ct-divider"><td colspan="{len(col_keys) + 1}">{text}</td></tr>'
 
+    country_label = f'{country_flag} {iso3} (MtCO₂e)' if (country_flag and iso3) else '🏳 Country (MtCO₂e)'
     rows_html = (
-        row('🌍 Global (MtCO₂e)',
-            [f'<strong>{_fmt_mt(global_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
+        row(country_label,
+            [f'<strong>{_fmt_mt(country_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
         + row(f'🌐 {continent_name} (MtCO₂e)',
               [f'<strong>{_fmt_mt(continent_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
-        + row('🏳 Country (MtCO₂e)',
-              [f'<strong>{_fmt_mt(country_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
+        + row('🌍 Global (MtCO₂e)',
+              [f'<strong>{_fmt_mt(global_vals.get(k, 0) / 1e6)}</strong>' for k in col_keys])
         + row('% of Global', [
             (lambda pct, color: (
                 f'<div class="ct-pct-cell"><span>{pct:.1f}%</span>'
@@ -237,10 +241,10 @@ def _build_sector_table(
             for i, k in enumerate(col_keys)
         ])
         + divider('Rankings &amp; Trends')
-        + row('🏆 Global Ranking',
-              [_rank_badge_html(global_rank_map.get(k), global_count_map.get(k)) for k in col_keys])
         + row(f'🌐 {continent_name} Ranking',
               [_rank_badge_html(continent_rank_map.get(k), continent_count_map.get(k)) for k in col_keys])
+        + row('🌍 Global Ranking',
+              [_rank_badge_html(global_rank_map.get(k), global_count_map.get(k)) for k in col_keys])
         + row(f'📈 Change {from_year}→{to_year}', [_pct_str(chg_vals.get(k)) for k in col_keys])
         + row(f'📆 YoY {to_year - 1}→{to_year}',
               [_pct_str(yoy_vals.get(k)) for k in col_keys]
@@ -250,8 +254,9 @@ def _build_sector_table(
 
     # Optional EF section
     if ef_country is not None:
+        country_ef_label = f'{country_flag} {iso3} EF' if (country_flag and iso3) else '🏳 Country EF'
         rows_html += divider('Average Emissions Factor Benchmarking')
-        rows_html += row('🏭 Country EF',
+        rows_html += row(country_ef_label,
                          [_fmt_ef(ef_country.get(k)) for k in col_keys])
         rows_html += row(f'🌐 {continent_name} EF',
                          [_fmt_ef(ef_continent.get(k) if ef_continent else None) for k in col_keys])
@@ -660,6 +665,11 @@ def show_country_trends():
         for k in col_keys
     }
 
+    # ── Country flag ─────────────────────────────────────────────────────────
+    _flag_df = get_iso3_flag_table()
+    _iso3_flag_dict = dict(zip(_flag_df['iso3'], _flag_df['flag']))
+    country_flag = _iso3_flag_dict.get(iso3, '🏳')
+
     # ── Column styling ────────────────────────────────────────────────────────
     if selected_sector:
         base = SECTOR_COLORS.get(selected_sector, '#888888')
@@ -878,10 +888,6 @@ def show_country_trends():
             accent = SECTOR_COLORS.get(selected_sector, '#4380F5') if selected_sector else '#4380F5'
             st.markdown(
                 f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px'>"
-                f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
-                f"<div class='ct-summary-label'>Strategies</div>"
-                f"<div class='ct-summary-value' style='color:{accent}'>{len(reductions_df)}</div>"
-                f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #555d72'>"
                 f"<div class='ct-summary-label'>Inventory</div>"
                 f"<div class='ct-summary-value' style='color:#555d72'>{_fmt_mt(total_inv / 1e6)} Mt</div>"
@@ -889,6 +895,10 @@ def show_country_trends():
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Reducible</div>"
                 f"<div class='ct-summary-value' style='color:#2e7d32'>{_fmt_mt(total_red / 1e6)} Mt</div>"
+                f"</div>"
+                f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
+                f"<div class='ct-summary-label'>Strategies</div>"
+                f"<div class='ct-summary-value' style='color:{accent}'>{len(reductions_df)}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Potential</div>"
@@ -1010,6 +1020,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);color:#555;}
                 chg_vals=chg_vals, yoy_vals=yoy_vals,
                 from_year=from_year, to_year=to_year,
                 continent_name=country_continent,
+                iso3=iso3, country_flag=country_flag,
                 ef_country=ef_country_map, ef_continent=ef_continent_map,
                 ef_global=ef_global_map, ef_units=ef_unit_map,
                 ef_pct_map=ef_pct_map, highlighted_key=selected_subsector,
