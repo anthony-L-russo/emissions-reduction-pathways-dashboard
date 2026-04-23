@@ -1,4 +1,5 @@
 import io
+import urllib.parse
 import streamlit as st
 import duckdb
 import pandas as pd
@@ -179,7 +180,7 @@ def _build_sector_table(
     continent_rank_map, continent_count_map,
     chg_vals, yoy_vals,
     from_year, to_year, continent_name,
-    iso3=None, country_flag=None,
+    iso3=None, country_flag=None, country_name=None,
     ef_country=None, ef_continent=None, ef_global=None, ef_units=None,
     ef_pct_map=None,
     highlighted_key=None,
@@ -216,13 +217,26 @@ def _build_sector_table(
     def divider(text):
         return f'<tr class="ct-divider"><td colspan="{len(col_keys) + 1}">{text}</td></tr>'
 
-    country_label = f'{country_flag} {iso3} (tCO₂e)' if (country_flag and iso3) else '🏳 Country (tCO₂e)'
+    _ct = 'https://climatetrace.org/explore/#'
+    _params = lambda admin: urllib.parse.urlencode(
+        {'admin': admin, 'gas': 'co2e', 'year': to_year, 'timeframe': '100', 'sector': '', 'asset': ''},
+        safe=':,._()-'
+    )
+    global_url    = _ct + _params('')
+    continent_url = _ct + _params(f'{continent_name}:1:{continent_name}:continent')
+    _cname        = country_name or iso3 or ''
+    country_url   = _ct + _params(f'{_cname} ({iso3}):1:{iso3}:country') if iso3 else None
+
+    def _link(href, text):
+        return f'<a href="{href}" target="_blank" style="color:inherit;text-decoration:underline dotted">{text}</a>'
+
+    country_label = f'{country_flag} {_link(country_url, iso3 + " (tCO₂e)")}' if (country_flag and iso3 and country_url) else '🏳 Country (tCO₂e)'
     rows_html = (
         row(country_label,
             [f'<strong>{format_number_short(country_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row(f'🌐 {continent_name} (tCO₂e)',
+        + row(f'🌐 {_link(continent_url, continent_name + " (tCO₂e)")}',
               [f'<strong>{format_number_short(continent_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row('🌍 Global (tCO₂e)',
+        + row(f'🌍 {_link(global_url, "Global (tCO₂e)")}',
               [f'<strong>{format_number_short(global_vals.get(k, 0))}</strong>' for k in col_keys])
         + row('% of Global', [
             (lambda pct, color: (
@@ -271,12 +285,12 @@ def _build_sector_table(
                     return '<span style="color:#999">—</span>'
                 pct, n = data
                 return (
-                    f'<span style="font-size:13px">{pct}th pctile<br>'
-                    f'<span style="color:#999;font-size:13px">({n:,} assets)</span></span>'
+                    f'<span style="font-size:15px">{pct}th pctile<br>'
+                    f'<span style="color:#999;font-size:15px">({n:,} assets)</span></span>'
                 )
             rows_html += row('📊 EF Percentile (global)', [_ef_pct_cell(k) for k in col_keys])
         rows_html += row('📏 Unit',
-                         [f'<span style="font-size:13px;color:#888">{ef_units.get(k, "—") if ef_units else "—"}</span>'
+                         [f'<span style="font-size:15px;color:#888">{ef_units.get(k, "—") if ef_units else "—"}</span>'
                           for k in col_keys],
                          italic=True)
 
@@ -745,8 +759,8 @@ def show_country_trends():
         )
         with hdr_pie:
             st.markdown(
-                f"**{pie_subtitle}**  "
-                f"<span style='font-size:13px;color:#888'>{to_year}</span>",
+                f"**{pie_subtitle}** &nbsp;&nbsp;"
+                f"<span style='font-size:15px;color:#888'>{to_year}</span>",
                 unsafe_allow_html=True,
             )
         with dl_pie:
@@ -839,13 +853,18 @@ def show_country_trends():
             selected_subsector.replace('-', ' ').title() if selected_subsector
             else (SECTOR_LABELS.get(selected_sector, '') if selected_sector else '')
         )
-        st.markdown(
-            f"**Reduction Strategies**  "
-            f"<span style='font-size:13px;color:#888'>"
-            f"{reductions_label + ' · ' if reductions_label else ''}"
-            f"{selected_country} · {ers_year}</span>",
-            unsafe_allow_html=True,
-        )
+        ct_country_slug = urllib.parse.quote(selected_country.replace(' ', '-'), safe='-(),') + f'-({iso3})'
+        ct_url = f"https://climatetrace.org/reduce/country/{iso3}/{ct_country_slug}"
+        hdr_ers, dl_ers = st.columns([8, 1])
+        with hdr_ers:
+            st.markdown(
+                f"**Reduction Strategies** &nbsp;&nbsp;"
+                f'<span style="font-size:15px;color:#888">'
+                f"{reductions_label + ' · ' if reductions_label else ''}"
+                f'<a href="{ct_url}" target="_blank" style="color:inherit">{selected_country}</a>'
+                f" · {ers_year}</span>",
+                unsafe_allow_html=True,
+            )
 
         sector_filter = f"AND sector = '{selected_sector}'" if selected_sector else ''
         subsector_filter = f"AND subsector = '{selected_subsector}'" if selected_subsector else ''
@@ -881,6 +900,14 @@ def show_country_trends():
             ORDER BY reductions DESC
         """)
 
+        with dl_ers:
+            if not reductions_df.empty:
+                st.download_button(
+                    "⬇", data=_df_to_csv(reductions_df),
+                    file_name=f"country_reductions_{selected_country}_{ers_year}.csv",
+                    mime="text/csv", key="ct_dl_ers",
+                )
+
         if reductions_df.empty:
             st.info("No reduction strategies found for the selected filters.")
         else:
@@ -892,11 +919,11 @@ def show_country_trends():
                 f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px'>"
                 f"<div class='ct-summary-card' style='border-top:3px solid rgba(128,128,128,0.5)'>"
                 f"<div class='ct-summary-label'>Inventory</div>"
-                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} t</div>"
+                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} tCO₂e</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Reducible</div>"
-                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} t</div>"
+                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} tCO₂e</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
                 f"<div class='ct-summary-label'>Strategies</div>"
@@ -931,33 +958,36 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                 sub_label = sub_key.replace('-', ' ').title()
                 desc      = str(strat['description']).strip()
                 desc_html = (
-                    f"<p style='font-size:13px;margin:6px 0 10px'>{desc}</p>"
+                    f"<p style='font-size:15px;margin:6px 0 10px'>{desc}</p>"
                     if desc and desc.lower() not in ('nan', 'none', '') else ''
                 )
                 items_html += (
                     f"<details class='ct-strat' style='"
                     f"border-left:4px solid {color};border-radius:0 8px 8px 0;"
                     f"margin-bottom:6px;padding:0'>"
-                    f"<summary style='padding:9px 13px;cursor:pointer;font-size:13px;"
+                    f"<summary style='padding:9px 13px;cursor:pointer;font-size:15px;"
                     f"font-weight:600;display:flex;align-items:center;gap:8px'>"
                     f"<span>{strat['strategy_name']}</span>"
-                    f"<span style='white-space:nowrap;color:#2e7d32;font-weight:700;margin-left:auto'>"
-                    f"{format_number_short(red_t)} t &nbsp;−{pct_red:.1f}%</span>"
+                    f"<span style='white-space:nowrap;margin-left:auto;display:flex;align-items:baseline;gap:6px'>"
+                    f"<span style='color:#888;font-weight:700'>{format_number_short(red_t)}</span>"
+                    f"<span style='color:#888;font-weight:400'>tCO₂e</span>"
+                    f"<span style='color:#2e7d32;font-weight:700'>(−{pct_red:.1f}%)</span>"
+                    f"</span>"
                     f"</summary>"
                     f"<div style='padding:6px 13px 12px'>"
                     f"<div style='margin-bottom:8px'>"
                     f"<span style='background:{color}22;color:{color};border:1px solid {color}55;"
-                    f"border-radius:10px;padding:2px 10px;font-size:12px;font-weight:700'>"
+                    f"border-radius:10px;padding:2px 10px;font-size:13px;font-weight:700'>"
                     f"{sec_label}</span>"
-                    f"<span style='margin-left:7px;font-size:13px'>{sub_label}</span>"
+                    f"<span style='margin-left:7px;font-size:15px'>{sub_label}</span>"
                     f"</div>"
                     f"{desc_html}"
-                    f"<div style='display:flex;gap:20px;font-size:13px'>"
+                    f"<div style='display:flex;gap:20px;font-size:15px'>"
                     f"<div><span style='font-weight:700'>Inventory</span>"
-                    f"<br>{format_number_short(inv_t)} t</div>"
+                    f"<br>{format_number_short(inv_t)} tCO₂e</div>"
                     f"<div><span style='font-weight:700;color:#2e7d32'>Reduction</span>"
-                    f"<br>{format_number_short(red_t)} t"
-                    f" <span style='color:#2e7d32'>−{pct_red:.1f}%</span></div>"
+                    f"<br>{format_number_short(red_t)} tCO₂e"
+                    f" <span style='color:#2e7d32'> (−{pct_red:.1f}%)</span></div>"
                     f"<div><span style='font-weight:700'>Assets</span>"
                     f"<br>{n_assets:,}</div>"
                     f"</div></div></details>"
@@ -972,9 +1002,9 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
     table_heading = (
         f"**{selected_country}"
         + (f" · {SECTOR_LABELS.get(selected_sector, selected_sector)}" if selected_sector else "")
-        + " · Sector Breakdown**  "
-        + f"<span style='font-size:13px;color:#888'>"
-        + f"Global, {country_continent} &amp; Country · {to_year}</span>"
+        + " · Sector Breakdown** &nbsp;&nbsp;"
+        + f"<span style='font-size:15px;color:#888'>"
+        + f"Global, Region, and Country · {to_year}</span>"
     )
     table_rows = []
     ef_rows_exist = ef_country_map is not None
@@ -1022,7 +1052,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                 chg_vals=chg_vals, yoy_vals=yoy_vals,
                 from_year=from_year, to_year=to_year,
                 continent_name=country_continent,
-                iso3=iso3, country_flag=country_flag,
+                iso3=iso3, country_flag=country_flag, country_name=selected_country,
                 ef_country=ef_country_map, ef_continent=ef_continent_map,
                 ef_global=ef_global_map, ef_units=ef_unit_map,
                 ef_pct_map=ef_pct_map, highlighted_key=selected_subsector,
