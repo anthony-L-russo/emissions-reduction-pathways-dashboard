@@ -624,7 +624,7 @@ def show_emissions_reduction_plan():
             reduction_where_sql = "WHERE most_granular is true "
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Sector Reduction Opportunities (Annual)")
+    st.markdown(f"### Sector Reduction Opportunities ({ers_baseline_year})")
 
     if use_ct_ers is True:
 
@@ -1019,7 +1019,7 @@ def show_emissions_reduction_plan():
     """
 
     st.markdown(f"""
-        ### A possible {display_region_text if display_region_text != 'Global' else 'Global'} Emissions Reduction Plan
+        ### A Possible {display_region_text if display_region_text != 'Global' else 'Global'} Emissions Reduction Plan: {ers_baseline_year}
 
         <div style="border: 1px solid rgba(100,100,100,0.3); padding: 0px 18px 10px 18px; border-radius: 6px; font-size: 16px; line-height: 1.4;">
             <p style="margin-top: 0px;">{reduction_text.replace(chr(10), '<br>')}</p>
@@ -1041,7 +1041,7 @@ def show_emissions_reduction_plan():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ------------------------------- Asset Table ---------------------------------
-    st.markdown("### Top 100 Assets by Annual Reduction Potential")
+    st.markdown(f"### Top 100 Assets by Annual Reduction Potential ({ers_baseline_year})")
 
     asset_sorting_help = ("**Net Reduction Potential:** Top 100 assets by net emissions reduction potential, "
         "including emissions induced in other sectors from executing the respective reduction strategy.\n\n"
@@ -1123,15 +1123,15 @@ def show_emissions_reduction_plan():
                                          baseline_year_col_name,
                                          'Asset Reduction Potential Per Year (tCO2e)',
                                          'total_emissions_reduced_per_year']]
-        
+
         asset_table_df["Net Reduction Potential Per Year (tCO2e)"]  = asset_table_df["total_emissions_reduced_per_year"].apply(lambda x: f"{round(x):,}")
         asset_table_df = asset_table_df.drop(columns=["total_emissions_reduced_per_year"])
         styled_df = asset_table_df.style.applymap(
-        lambda val: "color: red", subset=[baseline_year_col_name]
-            ).applymap(
-                lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)",
-                                                    "Net Reduction Potential Per Year (tCO2e)"]
-            )
+            lambda val: "color: red", subset=[baseline_year_col_name]
+        ).applymap(
+            lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)",
+                                                "Net Reduction Potential Per Year (tCO2e)"]
+        )
     else:
         asset_table_df = asset_table_df[['asset_url',
                                          'country_url',
@@ -1140,14 +1140,11 @@ def show_emissions_reduction_plan():
                                          'asset_type',
                                          baseline_year_col_name,
                                          'Asset Reduction Potential Per Year (tCO2e)']]
-        
         styled_df = asset_table_df.style.applymap(
             lambda val: "color: red", subset=[baseline_year_col_name]
-                ).applymap(
-                    lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)"]
-                )
-
-    
+        ).applymap(
+            lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)"]
+        )
 
     row_height = 35  # pixels per row (adjust as needed)
     num_rows = 20
@@ -1159,8 +1156,8 @@ def show_emissions_reduction_plan():
         height=table_height,
         column_config={
             "asset_url": st.column_config.LinkColumn("asset_name", display_text=r"admin=([^&]+)"),
-            "country_url": st.column_config.LinkColumn("country_name", display_text=r"admin=([^:]+)")
-        }
+            "country_url": st.column_config.LinkColumn("country_name", display_text=r"admin=([^:]+)"),
+        },
     )
 
 

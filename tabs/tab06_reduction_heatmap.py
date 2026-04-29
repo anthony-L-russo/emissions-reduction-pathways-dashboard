@@ -50,6 +50,7 @@ def show_reduction_heatmap():
     gadm_0_path = CONFIG['gadm_0_path']
     heatmap_totals_path = CONFIG['heatmap_global_totals_path']
     heatmap_country_path = CONFIG['heatmap_global_country_path']
+    ers_baseline_year = CONFIG['ers_baseline_year']
 
     con = duckdb.connect()
 
@@ -378,7 +379,7 @@ def show_reduction_heatmap():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown(f"### **Regional {table_header_text} by Sector**")
+    st.markdown(f"### **Regional {table_header_text} by Sector: {ers_baseline_year}**")
 
     # --- Display first table ---
     st.dataframe(
