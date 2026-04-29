@@ -17,6 +17,7 @@ SECTOR_COLORS = {
     'waste':                  '#BBD421',
     'mineral-extraction':     '#4380F5',
     'fluorinated-gases':      '#B6B4B4',
+    'forestry-and-land-use':  '#779608',
 }
 
 SECTOR_LABELS = {
@@ -29,6 +30,7 @@ SECTOR_LABELS = {
     'waste':                  'Waste',
     'mineral-extraction':     'Mineral Extraction',
     'fluorinated-gases':      'Fluorinated Gases',
+    'forestry-and-land-use':  'Forestry & Land Use',
 }
 
 SECTOR_LABELS_SHORT = {
@@ -41,6 +43,7 @@ SECTOR_LABELS_SHORT = {
     'waste':                  'Waste',
     'mineral-extraction':     'Mining',
     'fluorinated-gases':      'F-Gases',
+    'forestry-and-land-use':  'Forestry',
 }
 
 GEOGRAPHIC_CONTINENTS = (
@@ -333,7 +336,19 @@ def show_country_trends():
     country_to_iso3 = dict(zip(countries_df['country_name'], countries_df['iso3_country']))
 
     # ── Controls: all on one row ──────────────────────────────────────────────
-    c_country, c_sector, c_subsector, c_from, c_to = st.columns([1.6, 1.4, 1.4, 0.9, 0.9])
+    c_country, c_sector, c_subsector, c_from, c_to, c_forestry = st.columns([1.6, 1.4, 1.4, 0.9, 0.9, 1.1])
+
+    # Render forestry toggle first so its value is available to the sector dropdown
+    with c_forestry:
+        forestry_toggle = st.radio(
+            "Forestry:",
+            ["Exclude", "Include"],
+            horizontal=True,
+            key="ct_forestry",
+        )
+        exclude_forestry = forestry_toggle == "Exclude"
+
+    forestry_filter = "AND sector != 'forestry-and-land-use'" if exclude_forestry else ""
 
     with c_country:
         default_idx = next(
@@ -346,7 +361,8 @@ def show_country_trends():
     iso3 = country_to_iso3.get(selected_country, '')
 
     with c_sector:
-        sector_options = ["All Sectors"] + [SECTOR_LABELS[s] for s in SECTOR_COLORS]
+        visible_sectors = [s for s in SECTOR_COLORS if not (exclude_forestry and s == 'forestry-and-land-use')]
+        sector_options = ["All Sectors"] + [SECTOR_LABELS[s] for s in visible_sectors]
         selected_sector_label = st.selectbox("Sector", sector_options, key="ct_sector")
 
     selected_sector = (
@@ -410,10 +426,10 @@ def show_country_trends():
     # ── Grouping ──────────────────────────────────────────────────────────────
     if selected_sector:
         group_col = 'subsector'
-        where_extra = f"AND sector = '{selected_sector}'"
+        where_extra = f"AND sector = '{selected_sector}' {forestry_filter}"
     else:
         group_col = 'sector'
-        where_extra = ''
+        where_extra = forestry_filter
 
     from_col = f'"{from_year}_total_emissions"'
     to_col   = f'"{to_year}_total_emissions"'
@@ -868,11 +884,25 @@ def show_country_trends():
 
         sector_filter = f"AND sector = '{selected_sector}'" if selected_sector else ''
         subsector_filter = f"AND subsector = '{selected_subsector}'" if selected_subsector else ''
+
+        # Total inventory: all assets regardless of strategy
+        inventory_row = _cached_fetchone(f"""
+            SELECT SUM(emissions_quantity)
+            FROM '{CONFIG['annual_asset_path']}'
+            WHERE iso3_country = '{iso3}'
+              AND year = {ers_year}
+              AND most_granular IS NOT FALSE
+              {sector_filter}
+              {subsector_filter}
+              {forestry_filter}
+        """)
+        total_inv = inventory_row[0] or 0 if inventory_row else 0
+
         reductions_df = _cached_df(f"""
             WITH best AS (
                 SELECT asset_id, sector, subsector, strategy_name, strategy_description,
                        total_emissions_reduced_per_year, emissions_quantity,
-                       asset_difficulty_score,
+                       asset_difficulty_score, reduction_q_type,
                        ROW_NUMBER() OVER (
                            PARTITION BY asset_id
                            ORDER BY asset_difficulty_score ASC
@@ -881,22 +911,32 @@ def show_country_trends():
                 WHERE iso3_country = '{iso3}'
                   AND year = {ers_year}
                   AND strategy_name IS NOT NULL
-                  AND reduction_q_type = 'asset'
+                  AND most_granular IS NOT FALSE
                   AND total_emissions_reduced_per_year > 0
                   {sector_filter}
                   {subsector_filter}
+                  {forestry_filter}
             )
             SELECT
-                strategy_name,
-                sector,
-                subsector,
+                CASE WHEN reduction_q_type = 'remainder' THEN 'Address remainder emissions'
+                     ELSE strategy_name END AS strategy_name,
+                CASE WHEN reduction_q_type = 'remainder' THEN 'remainder'
+                     ELSE sector END AS sector,
+                CASE WHEN reduction_q_type = 'remainder' THEN ''
+                     ELSE subsector END AS subsector,
                 MAX(strategy_description) AS description,
                 COUNT(DISTINCT asset_id) AS n_assets,
                 SUM(total_emissions_reduced_per_year) AS reductions,
                 SUM(emissions_quantity) AS inventory
             FROM best
             WHERE rn = 1
-            GROUP BY strategy_name, sector, subsector
+            GROUP BY
+                CASE WHEN reduction_q_type = 'remainder' THEN 'Address remainder emissions'
+                     ELSE strategy_name END,
+                CASE WHEN reduction_q_type = 'remainder' THEN 'remainder'
+                     ELSE sector END,
+                CASE WHEN reduction_q_type = 'remainder' THEN ''
+                     ELSE subsector END
             ORDER BY reductions DESC
         """)
 
@@ -911,7 +951,6 @@ def show_country_trends():
         if reductions_df.empty:
             st.info("No reduction strategies found for the selected filters.")
         else:
-            total_inv = reductions_df['inventory'].sum()
             total_red = reductions_df['reductions'].sum()
             total_pct = (total_red / total_inv * 100) if total_inv > 0 else 0
             accent = SECTOR_COLORS.get(selected_sector, '#4380F5') if selected_sector else '#4380F5'
@@ -927,7 +966,7 @@ def show_country_trends():
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
                 f"<div class='ct-summary-label'>Strategies</div>"
-                f"<div class='ct-summary-value' style='color:{accent}'>{len(reductions_df)}</div>"
+                f"<div class='ct-summary-value' style='color:{accent}'>{reductions_df['strategy_name'].nunique()}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Potential</div>"
@@ -953,13 +992,21 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                 n_assets  = int(strat['n_assets'])
                 sec_key   = strat['sector']
                 sub_key   = strat['subsector']
-                color     = SECTOR_COLORS.get(sec_key, '#888888')
+                is_remainder = sec_key == 'remainder'
+                color     = '#888888' if is_remainder else SECTOR_COLORS.get(sec_key, '#888888')
                 sec_label = SECTOR_LABELS.get(sec_key, sec_key.replace('-', ' ').title())
                 sub_label = sub_key.replace('-', ' ').title()
                 desc      = str(strat['description']).strip()
                 desc_html = (
                     f"<p style='font-size:15px;margin:6px 0 10px'>{desc}</p>"
                     if desc and desc.lower() not in ('nan', 'none', '') else ''
+                )
+                sector_badge_html = (
+                    '' if is_remainder else
+                    f"<span style='background:{color}22;color:{color};border:1px solid {color}55;"
+                    f"border-radius:10px;padding:2px 10px;font-size:13px;font-weight:700'>"
+                    f"{sec_label}</span>"
+                    f"<span style='margin-left:7px;font-size:15px'>{sub_label}</span>"
                 )
                 items_html += (
                     f"<details class='ct-strat' style='"
@@ -976,10 +1023,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                     f"</summary>"
                     f"<div style='padding:6px 13px 12px'>"
                     f"<div style='margin-bottom:8px'>"
-                    f"<span style='background:{color}22;color:{color};border:1px solid {color}55;"
-                    f"border-radius:10px;padding:2px 10px;font-size:13px;font-weight:700'>"
-                    f"{sec_label}</span>"
-                    f"<span style='margin-left:7px;font-size:15px'>{sub_label}</span>"
+                    f"{sector_badge_html}"
                     f"</div>"
                     f"{desc_html}"
                     f"<div style='display:flex;gap:20px;font-size:15px'>"
