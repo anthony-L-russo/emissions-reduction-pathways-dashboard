@@ -340,13 +340,14 @@ def show_country_trends():
 
     # Render forestry toggle first so its value is available to the sector dropdown
     with c_forestry:
-        forestry_toggle = st.radio(
+        st.radio(
             "Forestry:",
             ["Exclude", "Include"],
             horizontal=True,
             key="ct_forestry",
+            disabled=True,
         )
-        exclude_forestry = forestry_toggle == "Exclude"
+        exclude_forestry = True
 
     forestry_filter = "AND sector != 'forestry-and-land-use'" if exclude_forestry else ""
 
