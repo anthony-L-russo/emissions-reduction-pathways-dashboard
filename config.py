@@ -1,13 +1,13 @@
 
 CONFIG = {
-    "latest_full_inventory_year": 2025,
-    "latest_full_ers_year": 2024,
-    "asset_emissions_country_subsector_path": "data/asset_emissions/country_subsector_level/*.parquet",
+    "latest_inventory_year": 2025,
+    "ers_baseline_year": 2025,
+    "asset_emissions_country_subsector_path": "data/asset_emissions/monthly_country_subsector_level/*.parquet",
     "country_subsector_stats_path": "data/statistics/country_subsector_emissions_statistics/*.parquet",
     "country_subsector_totals_path": "data/statistics/country_subsector_emissions_totals/*.parquet",
     "gadm_1_statistics_path": "data/statistics/gadm_1_emissions_statistics/*.parquet",
     "percentile_path": "data/percentile_moer/ct_percentile_40sectors_moer_stat_industrial_20250824.parquet",
-    "annual_asset_path": "data/asset_emissions/asset_level_2024/*.parquet",
+    "annual_asset_path": "data/asset_emissions/annual_asset/*.parquet",
     "city_path": "data/city_emissions/*.parquet",
     "gadm_0_path": "data/gadm_emissions/gadm_0/*.parquet",
     "gadm_1_path": "data/gadm_emissions/gadm_1/*.parquet",

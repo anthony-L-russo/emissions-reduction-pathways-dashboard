@@ -7,7 +7,10 @@ import numpy as np
 import math
 import plotly.graph_objects as go
 # import duckdb
-# from config import CONFIG
+from config import CONFIG
+
+ers_baseline_year = CONFIG['ers_baseline_year']
+latest_inventory_year = CONFIG['latest_inventory_year']
 
 def format_dropdown_options(raw_values, lowercase_words=None):
     if lowercase_words is None:
@@ -1341,7 +1344,7 @@ def make_asset_url(row):
     params = {
         'admin': admin_value,
         'gas': 'co2e',
-        'year': '2024',
+        'year': latest_inventory_year,
         'timeframe': '100',
         'sector': '',
         'asset': str(row['asset_id'])
@@ -1356,7 +1359,7 @@ def make_country_url(row):
     params = {
         'admin': admin_value,
         'gas': 'co2e',
-        'year': '2024',
+        'year': latest_inventory_year,
         'timeframe': '100',
         'sector': '',
         'asset': ''
@@ -1374,7 +1377,7 @@ def make_state_url(row):
     params = {
         'admin': admin_value,
         'gas': 'co2e',
-        'year': '2024',
+        'year': latest_inventory_year,
         'timeframe': '100',
         'sector': '',
         'asset': ''
@@ -1391,7 +1394,7 @@ def make_county_url(row):
     params = {
         'admin': admin_value,
         'gas': 'co2e',
-        'year': '2024',
+        'year': latest_inventory_year,
         'timeframe': '100',
         'sector': '',
         'asset': ''

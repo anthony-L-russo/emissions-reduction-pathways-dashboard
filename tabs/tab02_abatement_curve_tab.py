@@ -38,6 +38,7 @@ def show_abatement_curve():
     gadm_2_path = CONFIG['gadm_2_path']
     region_options = CONFIG['region_options']
     city_path = CONFIG['city_path']
+    ers_baseline_year = CONFIG['ers_baseline_year']
 
     con = duckdb.connect()
 
@@ -289,7 +290,7 @@ def show_abatement_curve():
             else:
                 selected_subsector = selected_subsector_user
 
-        selected_year = 2024
+        selected_year = ers_baseline_year
 
         if len(selected_subsector) > 1:
             multisector = True
@@ -506,7 +507,7 @@ def show_abatement_curve():
         #     # Assign all columns at once
         #     renewables_df = renewables_df.assign(
         #         activity = float(RENEWABLE_MWH / NUMBER_OF_RENEWABLES),
-        #         year = 2024,
+        #         year = ers_baseline_year,
         #         asset_id = renewables_df.index,
         #         asset_name = 'Renewables Dummy',
         #         asset_type = 'Renewables',
