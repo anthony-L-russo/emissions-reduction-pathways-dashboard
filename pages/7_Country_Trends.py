@@ -51,8 +51,8 @@ st.markdown(
     </div>
     <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
         The data in this dashboard is from Climate TRACE release
-        <span style='color: red;'><strong>{get_release_version(con, asset_path)}</strong></span>
-        (excluding forestry), covering 740 million assets globally.
+        <span style='color: red;'><strong>{get_release_version(con, asset_path)}</strong></span>,
+        covering 740 million assets globally (forestry configurable below).
     </p>
     <p style="margin-top: 2px; font-size: 1em; font-style: italic;">
         This web application is for the internal use of Climate TRACE and its partners only.
