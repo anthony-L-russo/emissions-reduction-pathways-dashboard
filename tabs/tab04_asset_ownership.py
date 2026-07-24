@@ -33,15 +33,22 @@ def show_ownership_module():
     annual_asset_path = CONFIG['annual_asset_path']
     gadm_0_path = CONFIG['gadm_0_path']
     ownership_path = CONFIG['asset_ownership_path']
-    
+
     sector_color_map, sector_line_map = define_color_lines('sector')
 
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+    owner_col, loc_col, subsector_col, gas_col = st.columns([1, 1, 1, 0.7])
+
+    with gas_col:
+        selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab04_gas")
+        selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+
     ##### IMPORT DATA -------
-    
+
     # import ownership + emissions data
-    query_df_ownership = get_ownership_sql(annual_asset_path, ownership_path)
+    query_df_ownership = get_ownership_sql(annual_asset_path, ownership_path, gas=selected_gas)
     df_ownership = con.execute(query_df_ownership).df()
-    query_ct_emissions = get_gadm_emissions_sql(gadm_0_path)
+    query_ct_emissions = get_gadm_emissions_sql(gadm_0_path, gas=selected_gas)
     df_gadm_emissions = con.execute(query_ct_emissions).df()
 
     # calculate country-level and gadm-level emissions factors
@@ -147,9 +154,7 @@ def show_ownership_module():
         
         st.session_state.selected_subsectors = [s for s in st.session_state.selected_subsectors if s in subsector_options]
 
-    owner_col, loc_col, subsector_col = st.columns(3)
-
-    # compute current options 
+    # compute current options
     with owner_col:
         mask = pd.Series(True, index=df_ownership.index)
         if st.session_state.selected_locations:

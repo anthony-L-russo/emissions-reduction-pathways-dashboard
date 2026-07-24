@@ -97,8 +97,13 @@ def show_monthly_trends_v2():
     _col_check = _cached_df(f"SELECT * FROM '{country_subsector_stats_path}' LIMIT 0")
     _all_stats_columns = _col_check.columns.tolist()
 
-    # Create columns for Change View toggle and Region dropdown
-    col_view, col_region, col_month = st.columns([3, 1.6, 3])
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+
+    col_view, col_region, col_gas, col_month = st.columns([3, 1.6, 0.7, 3])
+
+    with col_gas:
+        selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab07_gas")
+        selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
 
     with col_view:
         trend_view = st.segmented_control(
@@ -271,7 +276,7 @@ def show_monthly_trends_v2():
 
     # Get emissions columns from the stats data
     # Build WHERE clause based on region selection
-    where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+    where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
     _add_region_filter(where_clauses)
 
@@ -316,7 +321,7 @@ def show_monthly_trends_v2():
     elif trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter for YTD
         ytd_global_where_clauses = [
-            "gas = 'co2e_100yr'",
+            f"gas = '{selected_gas}'",
             "country_name IS NOT NULL",
             f"year IN ({latest_year - 1}, {latest_year})",
             f"month <= {latest_month}"
@@ -387,7 +392,7 @@ def show_monthly_trends_v2():
             else:
                 # Fallback: use totals table with cumulative sum (same as YTD YoY)
                 ytd_global_where_clauses = [
-                    "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+                    f"gas = '{selected_gas}'", "country_name IS NOT NULL",
                     f"year IN ({inventory_year - 1}, {inventory_year})",
                     f"month <= {latest_month}"
                 ]
@@ -487,7 +492,7 @@ def show_monthly_trends_v2():
     if trend_view == "Year-to-Date YoY":
         # Build WHERE clause with region filter
         country_ytd_where_clauses = [
-            "gas = 'co2e_100yr'",
+            f"gas = '{selected_gas}'",
             "country_name IS NOT NULL",
             f"year IN ({latest_year - 1}, {latest_year})",
             f"month <= {latest_month}"
@@ -540,7 +545,7 @@ def show_monthly_trends_v2():
         else:
             # Partial year: same as YTD YoY but using inventory_year
             inv_ctry_where = [
-                "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+                f"gas = '{selected_gas}'", "country_name IS NOT NULL",
                 f"year IN ({inventory_year - 1}, {inventory_year})",
                 f"month <= {latest_month}"
             ]
@@ -561,7 +566,7 @@ def show_monthly_trends_v2():
         change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
 
         # Build WHERE clause for region filter
-        country_totals_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        country_totals_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
         _add_region_filter(country_totals_where_clauses)
 
@@ -623,7 +628,7 @@ def show_monthly_trends_v2():
                 month,
                 SUM(emissions_quantity) AS emissions_quantity
             FROM '{country_subsector_totals_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
                 AND country_name = '{largest_decrease_country}'
                 AND year IN ({_yr_prev}, {_yr_cur})
                 AND month <= {latest_month}
@@ -722,7 +727,7 @@ def show_monthly_trends_v2():
                 month,
                 SUM(emissions_quantity) AS emissions_quantity
             FROM '{country_subsector_totals_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
                 AND country_name = '{largest_increase_country}'
                 AND year IN ({_yr_prev_inc}, {_yr_cur_inc})
                 AND month <= {latest_month}
@@ -781,7 +786,7 @@ def show_monthly_trends_v2():
         _sec_yr = inventory_year if is_inventory_view else latest_year
         # Build WHERE clause with region filter
         sector_card_ytd_where_clauses = [
-            "gas = 'co2e_100yr'",
+            f"gas = '{selected_gas}'",
             "country_name IS NOT NULL",
             f"year IN ({_sec_yr - 1}, {_sec_yr})",
             f"month <= {latest_month}"
@@ -836,7 +841,7 @@ def show_monthly_trends_v2():
         prev_column = emissions_column_prev
 
         # Build WHERE clause for region filter
-        sector_card_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        sector_card_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
         _add_region_filter(sector_card_where_clauses)
 
@@ -869,7 +874,7 @@ def show_monthly_trends_v2():
     if trend_view == "Year-to-Date YoY" or (is_inventory_view and not is_full_year):
         _sub_yr = inventory_year if is_inventory_view else latest_year
         subsector_card_ytd_where_clauses = [
-            "gas = 'co2e_100yr'",
+            f"gas = '{selected_gas}'",
             "country_name IS NOT NULL",
             f"year IN ({_sub_yr - 1}, {_sub_yr})",
             f"month <= {latest_month}"
@@ -925,7 +930,7 @@ def show_monthly_trends_v2():
         prev_column = emissions_column_prev
 
         # Build WHERE clause for region filter
-        subsector_card_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        subsector_card_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
         _add_region_filter(subsector_card_where_clauses)
 
@@ -1072,7 +1077,7 @@ def show_monthly_trends_v2():
         if trend_view == "Year-to-Date YoY":
             # Build WHERE clause for region filter
             sector_ytd_where_clauses = [
-                "gas = 'co2e_100yr'",
+                f"gas = '{selected_gas}'",
                 "country_name IS NOT NULL",
                 f"year IN ({latest_year - 1}, {latest_year})",
                 f"month <= {latest_month}"
@@ -1128,7 +1133,7 @@ def show_monthly_trends_v2():
             change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
 
             # Build WHERE clause for region filter
-            movers_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+            movers_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
             _add_region_filter(movers_where_clauses)
 
@@ -1475,7 +1480,7 @@ def show_monthly_trends_v2():
         if trend_view == "Year-to-Date YoY":
             # Build WHERE clause for region filter
             ytd_where_clauses = [
-                "gas = 'co2e_100yr'",
+                f"gas = '{selected_gas}'",
                 "country_name IS NOT NULL",
                 f"year IN ({latest_year - 1}, {latest_year})",
                 f"month <= {latest_month}"
@@ -1532,7 +1537,7 @@ def show_monthly_trends_v2():
             change_column = 'month_yoy_change' if trend_view == "Month YoY" else 'mom_change'
 
             # Build WHERE clause for region filter
-            country_movers_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+            country_movers_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
 
             _add_region_filter(country_movers_where_clauses)
 
@@ -1835,7 +1840,7 @@ def show_monthly_trends_v2():
     group_by_sql = ", ".join(group_by_cols)
 
     # Build WHERE clause with region filter
-    rank_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL",]
+    rank_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL",]
     _add_region_filter(rank_where_clauses)
 
     # Query data based on trend_view - unified for both rank metrics
@@ -2141,7 +2146,7 @@ def show_monthly_trends_v2():
     with st.expander("**Explore monthly emissions, activity, and emissions factor trends. Drill down by country, sector, and subsector**", expanded=False):
 
         # Get list of countries from the actual data table (avoids name mismatches with gadm_0)
-        ts_country_base_filter = "country_name IS NOT NULL AND gas = 'co2e_100yr'"
+        ts_country_base_filter = f"country_name IS NOT NULL AND gas = '{selected_gas}'"
         country_rows = _cached_fetchall(
             "SELECT DISTINCT country_name, iso3_country FROM '" + country_subsector_totals_path + "' WHERE " + ts_country_base_filter + " ORDER BY country_name"
         )
@@ -2247,7 +2252,7 @@ def show_monthly_trends_v2():
             scope_label = selected_scope
 
         # --- Build shared WHERE clauses ---
-        dd_where_clauses = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+        dd_where_clauses = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
         if (region_condition or is_subregion) and selected_country == "All Countries":
             _add_region_filter(dd_where_clauses)
         elif selected_country != "All Countries":
@@ -2280,7 +2285,7 @@ def show_monthly_trends_v2():
 
         # --- Emissions: YTD from totals table ---
         dd_ytd_where_clauses = [
-            "gas = 'co2e_100yr'", "country_name IS NOT NULL",
+            f"gas = '{selected_gas}'", "country_name IS NOT NULL",
             f"year IN ({latest_year - 1}, {latest_year})",
             f"month <= {latest_month}"
         ]
@@ -2314,7 +2319,7 @@ def show_monthly_trends_v2():
         show_activity_and_ef_cards = selected_subsector_dd != "All Subsectors"
 
         if show_activity_and_ef_cards:
-            asset_where_clauses = ["gas = 'co2e_100yr'"]
+            asset_where_clauses = [f"gas = '{selected_gas}'"]
             if (region_condition or is_subregion) and selected_country == "All Countries":
                 _add_region_filter(asset_where_clauses)
             elif selected_country != "All Countries":
@@ -2564,7 +2569,7 @@ def show_monthly_trends_v2():
 
         # Build WHERE clause for country/sector totals time series
         ts_where_clauses = [
-            "gas = 'co2e_100yr'",
+            f"gas = '{selected_gas}'",
             "country_name IS NOT NULL",
             f"year >= {earliest_year_ts}"
         ]
@@ -2601,7 +2606,7 @@ def show_monthly_trends_v2():
             df_ts_emissions['year_month'] = pd.to_datetime(df_ts_emissions['year_month'])
 
         # Query asset-level time series (always runs for emissions line, like tab03)
-        ts_asset_where_clauses = ["gas = 'co2e_100yr'"]
+        ts_asset_where_clauses = [f"gas = '{selected_gas}'"]
 
         # Add region/country filter
         if (region_condition or is_subregion) and selected_country == "All Countries":
@@ -2995,7 +3000,7 @@ def show_monthly_trends_v2():
                                 write_metadata(writer.sheets["Monthly Time Series"], ts_meta)
 
                         if selections["raw"]:
-                            raw_where = ["gas = 'co2e_100yr'", "country_name IS NOT NULL"]
+                            raw_where = [f"gas = '{selected_gas}'", "country_name IS NOT NULL"]
                             rc = data_dict["region_condition"]
                             if data_dict.get("is_subregion") and data_dict.get("subregion_in_clause"):
                                 raw_where.append(data_dict["subregion_in_clause"])
@@ -3012,7 +3017,7 @@ def show_monthly_trends_v2():
 
                             metadata = [
                                 ("Region", data_dict["selected_scope"]),
-                                ("Filters", "gas = co2e_100yr, country_name IS NOT NULL"),
+                                ("Filters", f"gas = {selected_gas}, country_name IS NOT NULL"),
                             ]
                             start = len(metadata) + 1
                             df_raw.to_excel(writer, sheet_name="Raw Statistics", startrow=start, index=False)
