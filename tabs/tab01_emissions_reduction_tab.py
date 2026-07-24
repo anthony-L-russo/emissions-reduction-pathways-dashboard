@@ -93,8 +93,8 @@ def show_emissions_reduction_plan():
         use_ct_ers = False
 
     # --------- DROPDOWN ROW 1 ----------
-
-    country_dropdown, state_province_dropdown, county_district_dropdown, city_dropdown, forestry_toggle, download_col  = st.columns([2,2.3,2.3,2.3,1.75,1])
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+    country_dropdown, state_province_dropdown, county_district_dropdown, city_dropdown, forestry_toggle_col, download_col = st.columns([1.6, 1.8, 1.8, 1.8, 2.5, 1])
 
     with country_dropdown:
         
@@ -239,14 +239,19 @@ def show_emissions_reduction_plan():
                 on_change=reset_state_and_county
             )
     
-    with forestry_toggle:
-        forestry_toggle = st.radio(
-            "Forestry Data:",
-            ["Exclude", "Include"],
-            horizontal=True
-        )
+    with forestry_toggle_col:
+        gas_sub, forestry_sub = st.columns([1, 1.5])
+        with gas_sub:
+            selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab01_gas")
+            selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+        with forestry_sub:
+            forestry_val = st.radio(
+                "Forestry Data:",
+                ["Exclude", "Include"],
+                horizontal=True
+            )
 
-        if forestry_toggle == "Exclude":
+        if forestry_val == "Exclude":
             exclude_forestry = True
         else:
             exclude_forestry = False
@@ -422,7 +427,7 @@ def show_emissions_reduction_plan():
     where_clauses.append("subsector <> 'net-soil-organic-carbon'")
     if selected_region == "Global":
         table = gadm_0_path
-        where_clauses.append("gas = 'co2e_100yr'")
+        where_clauses.append(f"gas = '{selected_gas}'")
         where_clauses.append("country_name is not null")
     elif selected_city and not selected_city.startswith("--"):
         table = city_path
@@ -441,7 +446,7 @@ def show_emissions_reduction_plan():
         where_clauses.append(f"gadm_1_name = '{selected_state_province}'")
     else:
         table = gadm_0_path
-        where_clauses.append("gas = 'co2e_100yr'")
+        where_clauses.append(f"gas = '{selected_gas}'")
         where_clauses.append("country_name is not null")
 
         if region_condition:
@@ -562,6 +567,7 @@ def show_emissions_reduction_plan():
 
     # --------------------------- Stacked Bar ---------------------------
     reduction_where_clause = []
+    reduction_where_clause.append(f"ae.gas = '{selected_gas}'")
     if col and val:
         if isinstance(val, list):
             val_str = "(" + ", ".join(f"'{v}'" for v in val) + ")"
@@ -1187,7 +1193,8 @@ def show_emissions_reduction_plan():
                                     reduction_where_sql,
                                     region_condition,
                                     selected_year,
-                                    exclude_forestry
+                                    exclude_forestry,
+                                    gas=selected_gas
                                 )
         
         # print(country_subsector_ef_sql)

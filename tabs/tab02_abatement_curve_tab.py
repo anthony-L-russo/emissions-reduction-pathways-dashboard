@@ -68,6 +68,7 @@ def show_abatement_curve():
     country_map = {row[0]: row[1] for row in country_rows}
     unique_countries = list(country_map.keys())
 
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
     geography_col, sector_program_col = st.columns(2)
     with geography_col:
         with st.expander("Geography", expanded=True):
@@ -298,20 +299,26 @@ def show_abatement_curve():
             multisector = False
 
         with st.expander("Program View", expanded=True):
+            program_sub, gas_sub = st.columns([3, 1])
+            with gas_sub:
+                selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab02_gas")
+                selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+
             program_options = ["Emissions Reduction Solutions"]
             program_help = ("**Emissions Reduction Solutions**: Emissions reduction potential ranked by difficulty score (ascending). Available for multisector selections.\n\n"
                             "**Emissions Factor Abatement Curve**: Activity ranked by emissions factor (descending). Only available for single sector selection.")
 
             if not multisector:
                 program_options.append("Emissions Factor Abatement Curve")
-            selected_program = st.radio(
-                "Select your view",
-                program_options,
-                horizontal=True,
-                help=program_help,
-                key="selection_program_AC",
-                on_change=mark_ac_recompute
-                )
+            with program_sub:
+                selected_program = st.radio(
+                    "Select your view",
+                    program_options,
+                    horizontal=True,
+                    help=program_help,
+                    key="selection_program_AC",
+                    on_change=mark_ac_recompute
+                    )
 
     if selected_program == "Emissions Reduction Solutions":
         selected_x = 'net_reduction_potential'
@@ -324,7 +331,7 @@ def show_abatement_curve():
     ##### QUERY DATA -------
 
     # query assets based on selection
-    query_df_assets = find_sector_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause)
+    query_df_assets = find_sector_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause, gas=selected_gas)
 
     print("Getting asset data")
     df_assets = con.execute(query_df_assets).df()
@@ -336,7 +343,7 @@ def show_abatement_curve():
         ##### SUMMARIZE KEY METRICS -------
         # totals for ers, emissions, reduction, assets, countries
 
-        query_totals = summarize_totals_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause)
+        query_totals = summarize_totals_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause, gas=selected_gas)
         df_totals = con.execute(query_totals).df()
         total_ers = df_totals['total_ers'][0]
         total_subsectors = df_totals['total_subsectors'][0]
@@ -350,11 +357,11 @@ def show_abatement_curve():
         #     total_assets = df_totals['total_assets'][0]
         total_countries = df_totals['total_countries'][0]
 
-        query_reductions = summarize_reductions_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause)
+        query_reductions = summarize_reductions_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause, gas=selected_gas)
         df_reductions = con.execute(query_reductions).df()
         total_reductions = df_reductions['total_reductions'][0]
 
-        query_emissions = summarize_emissions_sql(total_path, selected_subsector, selected_year, total_geography_filters_clause)
+        query_emissions = summarize_emissions_sql(total_path, selected_subsector, selected_year, total_geography_filters_clause, gas=selected_gas)
         df_emissions = con.execute(query_emissions).df()
         total_emissions = df_emissions['emissions_quantity'].sum()
 
@@ -577,7 +584,7 @@ def show_abatement_curve():
         st.markdown(f"### {total_ers} Emissions Reduction Solutions (ERS) Strategies")
 
         # create a table to summarize ers for sector
-        query_ers = summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause)
+        query_ers = summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause, gas=selected_gas)
         ers_table = con.execute(query_ers).df()
         csv_ers = ers_table.to_csv(index=False).encode('utf-8')
 
@@ -600,7 +607,7 @@ def show_abatement_curve():
         print(f"✅ ERS table loaded ({len(ers_table):,} rows)", flush=True)
 
         # create a table with all assets + ERS info
-        query_table = create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause)
+        query_table = create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, asset_geography_filters_clause, gas=selected_gas)
         df_table = con.execute(query_table).df()
 
         if selected_program == 'Emissions Reduction Solutions':

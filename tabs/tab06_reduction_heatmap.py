@@ -65,8 +65,12 @@ def show_reduction_heatmap():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+    country_dropdown, state_province_dropdown, selected_metric_dropdown, gas_col = st.columns([2, 2, 2, 0.8])
 
-    country_dropdown, state_province_dropdown, selected_metric_dropdown  = st.columns([2,2,2])
+    with gas_col:
+        selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab06_gas")
+        selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
 
     with country_dropdown:
         
@@ -152,11 +156,14 @@ def show_reduction_heatmap():
 
     if selected_region == 'Global' and selected_metric == 'Emissions Quantity':
         sector_df = con.execute(f'''
-            select * from '{heatmap_totals_path}'                        
+            select * from '{heatmap_totals_path}'
+            where gas = '{selected_gas}'
         ''').df()
-        
+
         table_df = con.execute(f'''
-            select * from '{heatmap_country_path}' order by total_emissions_quantity desc                
+            select * from '{heatmap_country_path}'
+            where gas = '{selected_gas}'
+            order by total_emissions_quantity desc
         ''').df()
 
         # normalize label column
@@ -174,7 +181,8 @@ def show_reduction_heatmap():
                                         annual_asset_path=annual_asset_path,
                                         gadm_1_path=gadm_1_path,
                                         gadm_2_path=gadm_2_path,
-                                        sum_column=sum_column)
+                                        sum_column=sum_column,
+                                        gas=selected_gas)
         
         # print(heatmap_sql['sector_summary'])
         

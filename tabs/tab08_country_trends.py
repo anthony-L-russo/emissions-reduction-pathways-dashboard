@@ -321,11 +321,18 @@ def show_country_trends():
     asset_path = CONFIG['asset_emissions_country_subsector_path']
     demographic_path = CONFIG['demographic_path']
 
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+    c_country, c_sector, c_subsector, c_from, c_to, c_forestry, c_gas = st.columns([1.6, 1.4, 1.4, 0.9, 0.9, 1.1, 0.7])
+
+    with c_gas:
+        selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab08_gas")
+        selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+
     # ── Country list ──────────────────────────────────────────────────────────
     countries_df = _cached_df(f"""
         SELECT DISTINCT country_name, iso3_country
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND country_name IS NOT NULL
           AND iso3_country IS NOT NULL
           AND length(iso3_country) = 3
@@ -334,9 +341,6 @@ def show_country_trends():
 
     country_options = countries_df['country_name'].tolist()
     country_to_iso3 = dict(zip(countries_df['country_name'], countries_df['iso3_country']))
-
-    # ── Controls: all on one row ──────────────────────────────────────────────
-    c_country, c_sector, c_subsector, c_from, c_to, c_forestry = st.columns([1.6, 1.4, 1.4, 0.9, 0.9, 1.1])
 
     # Render forestry toggle first so its value is available to the sector dropdown
     with c_forestry:
@@ -377,7 +381,7 @@ def show_country_trends():
         sub_rows = _cached_df(f"""
             SELECT DISTINCT subsector
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
               AND iso3_country = '{iso3}'
               AND sector = '{selected_sector}'
               AND "2025_total_emissions" > 0
@@ -417,7 +421,7 @@ def show_country_trends():
     # ── Country continent ─────────────────────────────────────────────────────
     continent_row = _cached_fetchone(f"""
         SELECT continent FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND iso3_country = '{iso3}'
           AND continent IN {str(GEOGRAPHIC_CONTINENTS)}
         LIMIT 1
@@ -448,7 +452,7 @@ def show_country_trends():
                SUM({to_col})   AS y_to,
                SUM({prev_col}) AS y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND iso3_country = '{iso3}'
           {where_extra}
         GROUP BY {group_col}
@@ -468,7 +472,7 @@ def show_country_trends():
                SUM({from_col}) AS global_y_from,
                SUM({prev_col}) AS global_y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr' AND length(iso3_country) = 3
+        WHERE gas = '{selected_gas}' AND length(iso3_country) = 3
           {where_extra}
         GROUP BY {group_col}
     """)
@@ -482,7 +486,7 @@ def show_country_trends():
                SUM({from_col}) AS cont_y_from,
                SUM({prev_col}) AS cont_y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND continent = '{country_continent}'
           AND length(iso3_country) = 3
           {where_extra}
@@ -498,7 +502,7 @@ def show_country_trends():
             SELECT iso3_country, {group_col} AS grp,
                    SUM({to_col}) AS total
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr' AND iso3_country IS NOT NULL
+            WHERE gas = '{selected_gas}' AND iso3_country IS NOT NULL
               AND length(iso3_country) = 3 {where_extra}
             GROUP BY iso3_country, {group_col}
         )
@@ -516,7 +520,7 @@ def show_country_trends():
             SELECT iso3_country, {group_col} AS grp,
                    SUM({to_col}) AS total
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
               AND continent = '{country_continent}'
               AND iso3_country IS NOT NULL AND length(iso3_country) = 3
               {where_extra}
@@ -534,7 +538,7 @@ def show_country_trends():
     global_count_df = _cached_df(f"""
         SELECT {group_col} AS grp, COUNT(DISTINCT iso3_country) AS n
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr' AND length(iso3_country) = 3
+        WHERE gas = '{selected_gas}' AND length(iso3_country) = 3
           AND {to_col} > 0 {where_extra}
         GROUP BY {group_col}
     """)
@@ -543,7 +547,7 @@ def show_country_trends():
     cont_count_df = _cached_df(f"""
         SELECT {group_col} AS grp, COUNT(DISTINCT iso3_country) AS n
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND continent = '{country_continent}'
           AND length(iso3_country) = 3
           AND {to_col} > 0 {where_extra}
@@ -561,7 +565,7 @@ def show_country_trends():
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
                 WHERE iso3_country = '{iso3}' AND sector = '{selected_sector}'
-                  AND gas = 'co2e_100yr'
+                  AND gas = '{selected_gas}'
                   AND weighted_average_emissions_factor > 0
                   AND weighted_average_emissions_factor IS NOT NULL
                 GROUP BY original_inventory_sector
@@ -574,7 +578,7 @@ def show_country_trends():
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
             WHERE m.iso3_country = '{iso3}' AND m.sector = '{selected_sector}'
-              AND m.gas = 'co2e_100yr'
+              AND m.gas = '{selected_gas}'
               AND m.weighted_average_emissions_factor > 0
         """)
         ef_country_map = dict(zip(ef_country_df['grp'], ef_country_df['ef']))
@@ -589,7 +593,7 @@ def show_country_trends():
             WITH latest AS (
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
-                WHERE sector = '{selected_sector}' AND gas = 'co2e_100yr'
+                WHERE sector = '{selected_sector}' AND gas = '{selected_gas}'
                   AND continent = '{country_continent}' AND length(iso3_country) = 3
                   AND weighted_average_emissions_factor > 0
                 GROUP BY original_inventory_sector
@@ -601,7 +605,7 @@ def show_country_trends():
             JOIN latest l
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
-            WHERE m.sector = '{selected_sector}' AND m.gas = 'co2e_100yr'
+            WHERE m.sector = '{selected_sector}' AND m.gas = '{selected_gas}'
               AND m.continent = '{country_continent}' AND length(m.iso3_country) = 3
               AND m.weighted_average_emissions_factor > 0
             GROUP BY m.original_inventory_sector
@@ -613,7 +617,7 @@ def show_country_trends():
             WITH latest AS (
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
-                WHERE sector = '{selected_sector}' AND gas = 'co2e_100yr'
+                WHERE sector = '{selected_sector}' AND gas = '{selected_gas}'
                   AND length(iso3_country) = 3
                   AND weighted_average_emissions_factor > 0
                 GROUP BY original_inventory_sector
@@ -625,7 +629,7 @@ def show_country_trends():
             JOIN latest l
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
-            WHERE m.sector = '{selected_sector}' AND m.gas = 'co2e_100yr'
+            WHERE m.sector = '{selected_sector}' AND m.gas = '{selected_gas}'
               AND length(m.iso3_country) = 3
               AND m.weighted_average_emissions_factor > 0
             GROUP BY m.original_inventory_sector
@@ -639,7 +643,7 @@ def show_country_trends():
                     SELECT activity_units FROM '{asset_path}'
                     WHERE sector = '{selected_sector}'
                       AND original_inventory_sector = '{grp}'
-                      AND gas = 'co2e_100yr'
+                      AND gas = '{selected_gas}'
                     LIMIT 1
                 """)
                 if unit_row:
