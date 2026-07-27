@@ -304,6 +304,9 @@ def show_abatement_curve():
                 selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab02_gas")
                 selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
 
+            gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+            gas_unit = f"t{gas_label}"
+
             program_options = ["Emissions Reduction Solutions"]
             program_help = ("**Emissions Reduction Solutions**: Emissions reduction potential ranked by difficulty score (ascending). Available for multisector selections.\n\n"
                             "**Emissions Factor Abatement Curve**: Activity ranked by emissions factor (descending). Only available for single sector selection.")
@@ -551,7 +554,7 @@ def show_abatement_curve():
         #         selected_strategy_list = None
         #     )
         #     df_assets = pd.concat([df_assets, renewables_df])
-        fig, df_csv = plot_abatement_curve(df_assets, selected_group, selected_color, dict_color, dict_lines, selected_list, selected_assets, selected_x, selected_y, selected_threshold, fill=True)
+        fig, df_csv = plot_abatement_curve(df_assets, selected_group, selected_color, dict_color, dict_lines, selected_list, selected_assets, selected_x, selected_y, selected_threshold, fill=True, gas_unit=gas_unit)
         print("✅ Plot generated", flush=True)
 
         title_col, download_col = st.columns([6, 1])
@@ -630,8 +633,8 @@ def show_abatement_curve():
         print("✅ URL columns created", flush=True)
 
         # filter + format table
-        csv_assets = df_table[['subsector', 'asset_name', 'asset_url', 'country_name', 'country_url', 'gadm_1_name', 'gadm_1_url', 'gadm_2_name', 'gadm_2_url', 'strategy_name', 'emissions_quantity (t CO2e)', 'emissions_factor', 'reduction_potential (t CO2e)']].to_csv(index=False).encode('utf-8')
-        df_table = df_table[['subsector', 'asset_url', 'country_url', 'gadm_1_url', 'gadm_2_url', 'strategy_name', 'emissions_quantity (t CO2e)', 'emissions_factor', 'reduction_potential (t CO2e)']]
+        csv_assets = df_table[['subsector', 'asset_name', 'asset_url', 'country_name', 'country_url', 'gadm_1_name', 'gadm_1_url', 'gadm_2_name', 'gadm_2_url', 'strategy_name', f'emissions_quantity ({gas_unit})', 'emissions_factor', f'reduction_potential ({gas_unit})']].to_csv(index=False).encode('utf-8')
+        df_table = df_table[['subsector', 'asset_url', 'country_url', 'gadm_1_url', 'gadm_2_url', 'strategy_name', f'emissions_quantity ({gas_unit})', 'emissions_factor', f'reduction_potential ({gas_unit})']]
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### Top 200 Reduction Opportunities")
         
@@ -663,8 +666,8 @@ def show_abatement_curve():
                 "country_url": st.column_config.LinkColumn("country", display_text=r'admin=([^:]+)'),
                 "gadm_1_url": st.column_config.LinkColumn("state / province", display_text=r'admin=(.+?)--'),
                 "gadm_2_url": st.column_config.LinkColumn("county / municipality / district", display_text=r'admin=(.+?)--'),
-                "emissions_quantity (t CO2e)": st.column_config.NumberColumn(format="localized"),
-                "reduction_potential (t CO2e)": st.column_config.NumberColumn(format="localized")}
+                f"emissions_quantity ({gas_unit})": st.column_config.NumberColumn(format="localized"),
+                f"reduction_potential ({gas_unit})": st.column_config.NumberColumn(format="localized")}
         )
         print("✅ Final table rendered", flush=True)
 

@@ -899,7 +899,7 @@ def define_color_lines(metric):
     return dict_color, dict_lines
 
 
-def plot_abatement_curve(gdf_asset, selected_group, selected_color, dict_color, dict_lines, selected_list, selected_assets, selected_x, selected_y, threshold, fill=False, cond={}):
+def plot_abatement_curve(gdf_asset, selected_group, selected_color, dict_color, dict_lines, selected_list, selected_assets, selected_x, selected_y, threshold, fill=False, cond={}, gas_unit="tCO₂e"):
 
     def weighted_avg(group, x_col, y_col, weight_x=0.5, weight_y=0.5):
         def min_max_normalize(series):
@@ -1001,21 +1001,21 @@ def plot_abatement_curve(gdf_asset, selected_group, selected_color, dict_color, 
         elif selected_group == 'strategy_name':
             x_axis_title = 'Number of ERS strategies'
     elif selected_x == 'emissions_quantity':
-        x_axis_title = 'Total Emissions (t of CO2e)'
+        x_axis_title = f'Total Emissions ({gas_unit})'
     elif selected_x == 'net_reduction_potential':
-        x_axis_title = 'Emissions Reduction Potential (t of CO2e)'
+        x_axis_title = f'Emissions Reduction Potential ({gas_unit})'
     elif selected_x == 'activity':
         x_axis_title = f"Activity ({df['activity_units'].iloc[-1]})"
 
     # change values based on y-axis
     if selected_y == 'emissions_quantity':
-        y_axis_title = 'Total Emissions (t of CO2e)'
+        y_axis_title = f'Total Emissions ({gas_unit})'
         ascending_order = False
     elif selected_y == 'net_reduction_potential':
-        y_axis_title = 'Emissions Reduction Potential (t of CO2e)'
+        y_axis_title = f'Emissions Reduction Potential ({gas_unit})'
         ascending_order = False
     elif selected_y == 'emissions_factor':
-        y_axis_title = 'Emissions Factor (t of CO2e / Activity)'
+        y_axis_title = f'Emissions Factor ({gas_unit} / Activity)'
         ascending_order = True
     elif selected_y == 'asset_difficulty_score':
         y_axis_title = 'Difficulty Score (1-10)'
@@ -1522,7 +1522,7 @@ def format_emissions(value):
     else:
         return f"{value:,.0f} tCO\u2082e" 
 
-def get_consequetial_hover_text(df_induced):
+def get_consequetial_hover_text(df_induced, gas_unit="tCO₂e"):
 
     # Format values up front
     df_induced["formatted_asset_reductions"] = df_induced["emissions_reduced_at_asset"].apply(
@@ -1561,7 +1561,7 @@ def get_consequetial_hover_text(df_induced):
         
         # Asset reductions
         if pd.notnull(row["formatted_asset_reductions"]) and row["formatted_asset_reductions"] not in ["0", None]:
-            parts.append(f"+ Asset Reductions: {row['formatted_asset_reductions']} tCO₂e")
+            parts.append(f"+ Asset Reductions: {row['formatted_asset_reductions']} {gas_unit}")
         
         # Inductions
         sector_inductions = df_induced[
@@ -1570,14 +1570,14 @@ def get_consequetial_hover_text(df_induced):
         ]
         for _, ind in sector_inductions.iterrows():
             if ind["formatted_induced_emissions"] not in ["0", None]:
-                parts.append(f"+ {ind['inducing_sector']}: {ind['formatted_induced_emissions']} tCO₂e")
+                parts.append(f"+ {ind['inducing_sector']}: {ind['formatted_induced_emissions']} {gas_unit}")
         
         # Combine into hover text
         formula = "<br>".join(parts)
         text = (
             f"<b>{row['sector']}</b><br>"
             f"{formula}<br>"
-            f"= <b style='color:green'>{row['formatted_reduction_potential']} tCO₂e</b>"
+            f"= <b style='color:green'>{row['formatted_reduction_potential']} {gas_unit}</b>"
         )
         hover_texts.append(text)
 

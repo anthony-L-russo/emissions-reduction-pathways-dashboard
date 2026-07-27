@@ -43,6 +43,9 @@ def show_ownership_module():
         selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab04_gas")
         selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
 
+    gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+    gas_unit = f"t{gas_label}"
+
     ##### IMPORT DATA -------
 
     # import ownership + emissions data
@@ -298,7 +301,7 @@ def show_ownership_module():
             bar_data,
             x='iso3_country',
             y='parent_emissions',
-            title='Emissions by Country (tCO2e)',
+            title=f'Emissions by Country ({gas_unit})',
             color='emissions_breakdown',
             color_discrete_map={'parent_net_reduction_potential': '#6AAD89', 'remaining_emissions': '#707070'},
             barmode='stack'

@@ -104,6 +104,8 @@ def show_monthly_trends_v2():
     with col_gas:
         selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab07_gas")
         selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+        gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+        gas_unit = f"t{gas_label}"
 
     with col_view:
         trend_view = st.segmented_control(
@@ -1306,7 +1308,7 @@ def show_monthly_trends_v2():
 
             fig_sector_movers.update_layout(
                 barmode='stack',
-                yaxis_title='Total Emissions (tCO₂e)',
+                yaxis_title=f'Total Emissions ({gas_unit})',
                 height=640,
                 showlegend=False,
                 margin=dict(l=80, r=80, t=30, b=120),
@@ -1405,7 +1407,7 @@ def show_monthly_trends_v2():
 
             fig_sector_movers.update_layout(
                 barmode='relative',
-                xaxis_title='Emissions Change (tCO₂e)',
+                xaxis_title=f'Emissions Change ({gas_unit})',
                 yaxis_title='Sector',
                 height=640,
                 showlegend=False,
@@ -1606,7 +1608,7 @@ def show_monthly_trends_v2():
 
             fig_country_inv.update_layout(
                 barmode='stack',
-                yaxis_title='Total Emissions (tCO₂e)',
+                yaxis_title=f'Total Emissions ({gas_unit})',
                 height=640,
                 showlegend=False,
                 margin=dict(l=70, r=50, t=30, b=120),
@@ -1688,7 +1690,7 @@ def show_monthly_trends_v2():
 
             fig_increases.update_layout(
                 barmode='relative',
-                yaxis_title='Emissions Change (tCO₂e)',
+                yaxis_title=f'Emissions Change ({gas_unit})',
                 height=350,
                 showlegend=False,
                 margin=dict(l=70, r=50, t=30, b=70),
@@ -1763,7 +1765,7 @@ def show_monthly_trends_v2():
 
                 fig_decreases.update_layout(
                     barmode='relative',
-                    yaxis_title='Emissions Change (tCO₂e)',
+                    yaxis_title=f'Emissions Change ({gas_unit})',
                     height=350,
                     showlegend=False,
                     margin=dict(l=70, r=50, t=10, b=90),
@@ -2513,8 +2515,8 @@ def show_monthly_trends_v2():
                         {em_arrow} {format_number_short(abs(em_change))} <span style="color: #888;">(</span><span style="color: {em_color};">{abs(em_pct):.1f}%</span><span style="color: #888;">)</span>
                     </div>
                     <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
-                        <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{em_cur_val:,.0f}</span> tCO₂e</div>
-                        <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{em_prev_val:,.0f}</span> tCO₂e</div>
+                        <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{em_cur_val:,.0f}</span> {gas_unit}</div>
+                        <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{em_prev_val:,.0f}</span> {gas_unit}</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
 
@@ -2550,8 +2552,8 @@ def show_monthly_trends_v2():
                             {ef_arrow} {abs(ef_pct_val):.1f}%
                         </div>
                         <div style="font-size: 0.82em; text-align: left; color: #888; line-height: 1.4; padding-left: 8px;">
-                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_cur_val)}</span> tCO₂e/unit</div>
-                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_prev_val)}</span> tCO₂e/unit</div>
+                            <div>{cur_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_cur_val)}</span> {gas_unit}/unit</div>
+                            <div>{prev_label}: <span style="font-weight: 600; color: var(--text-color);">{_fmt_ef(ef_prev_val)}</span> {gas_unit}/unit</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
             else:
@@ -2743,10 +2745,10 @@ def show_monthly_trends_v2():
                 )
 
         # Update y-axis labels
-        fig_ts.update_yaxes(title_text="Emissions (tCO₂e)", row=1, col=1)
+        fig_ts.update_yaxes(title_text=f"Emissions ({gas_unit})", row=1, col=1)
         if show_activity_and_ef:
             fig_ts.update_yaxes(title_text="Activity", row=2, col=1)
-            fig_ts.update_yaxes(title_text="Emission Factor (tCO₂e/unit)", row=3, col=1)
+            fig_ts.update_yaxes(title_text=f"Emission Factor ({gas_unit}/unit)", row=3, col=1)
 
         # Layout adjustments
         fig_ts.update_layout(

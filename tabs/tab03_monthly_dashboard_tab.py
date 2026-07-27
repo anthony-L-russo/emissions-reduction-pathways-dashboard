@@ -752,7 +752,7 @@ def show_monthly_dashboard():
             barmode="group",
             # title="Cumulative Monthly Emissions by Year",
             xaxis_title="Month",
-            yaxis_title="Cumulative Emissions (tCO₂e)",
+            yaxis_title=f"Cumulative Emissions ({gas_unit})",
             xaxis=dict(categoryorder="array", categoryarray=month_abbrs),
             legend_title="Year",
             margin=dict(t=50, b=30)

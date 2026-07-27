@@ -187,6 +187,7 @@ def _build_sector_table(
     ef_country=None, ef_continent=None, ef_global=None, ef_units=None,
     ef_pct_map=None,
     highlighted_key=None,
+    gas_unit='tCO₂e',
 ):
     """Transposed table: sectors/subsectors as columns.
 
@@ -233,13 +234,13 @@ def _build_sector_table(
     def _link(href, text):
         return f'<a href="{href}" target="_blank" style="color:inherit;text-decoration:underline dotted">{text}</a>'
 
-    country_label = f'{country_flag} {_link(country_url, iso3 + " (tCO₂e)")}' if (country_flag and iso3 and country_url) else '🏳 Country (tCO₂e)'
+    country_label = f'{country_flag} {_link(country_url, f"{iso3} ({gas_unit})")}' if (country_flag and iso3 and country_url) else f'🏳 Country ({gas_unit})'
     rows_html = (
         row(country_label,
             [f'<strong>{format_number_short(country_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row(f'🌐 {_link(continent_url, continent_name + " (tCO₂e)")}',
+        + row(f'🌐 {_link(continent_url, f"{continent_name} ({gas_unit})")}',
               [f'<strong>{format_number_short(continent_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row(f'🌍 {_link(global_url, "Global (tCO₂e)")}',
+        + row(f'🌍 {_link(global_url, f"Global ({gas_unit})")}',
               [f'<strong>{format_number_short(global_vals.get(k, 0))}</strong>' for k in col_keys])
         + row('% of Global', [
             (lambda pct, color: (
@@ -327,6 +328,8 @@ def show_country_trends():
     with c_gas:
         selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab08_gas")
         selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+        gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+        gas_unit = f"t{gas_label}"
 
     # ── Country list ──────────────────────────────────────────────────────────
     countries_df = _cached_df(f"""
@@ -584,7 +587,7 @@ def show_country_trends():
         ef_country_map = dict(zip(ef_country_df['grp'], ef_country_df['ef']))
         # EF unit = "t CO₂e / {activity_units}"
         ef_unit_map = {
-            grp: f"t CO₂e / {unit}" if unit else "—"
+            grp: f"{gas_unit} / {unit}" if unit else "—"
             for grp, unit in zip(ef_country_df['grp'], ef_country_df['activity_units'])
         }
 
@@ -647,7 +650,7 @@ def show_country_trends():
                     LIMIT 1
                 """)
                 if unit_row:
-                    ef_unit_map[grp] = f"t CO₂e / {unit_row[0]}" if unit_row[0] else "—"
+                    ef_unit_map[grp] = f"{gas_unit} / {unit_row[0]}" if unit_row[0] else "—"
 
         # EF percentile: country's EF vs all individual assets globally
         # Fetch all asset EFs for the sector at latest year, compute in pandas
@@ -814,14 +817,14 @@ def show_country_trends():
                 textposition='inside',
                 insidetextorientation='auto',
                 textfont=dict(size=12),
-                hovertemplate='%{label}<br>%{value:.3f} MtCO₂e (%{percent})<extra></extra>',
+                hovertemplate=f'%{{label}}<br>%{{value:.3f}} Mt{gas_label} (%{{percent}})<extra></extra>',
             ))
             if selected_subsector and selected_subsector in col_keys:
                 pulls = [0.0] * len(col_keys)
                 pulls[col_keys.index(selected_subsector)] = 0.08
                 fig_pie.data[0].pull = pulls
             fig_pie.add_annotation(
-                text=f"<b>{format_number_short(total_mt * 1e6)}</b><br>tCO₂e",
+                text=f"<b>{format_number_short(total_mt * 1e6)}</b><br>{gas_unit}",
                 x=0.29, y=0.5, showarrow=False,
                 font=dict(size=13), align='center',
             )
@@ -963,11 +966,11 @@ def show_country_trends():
                 f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px'>"
                 f"<div class='ct-summary-card' style='border-top:3px solid rgba(128,128,128,0.5)'>"
                 f"<div class='ct-summary-label'>Inventory</div>"
-                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} tCO₂e</div>"
+                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} {gas_unit}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Reducible</div>"
-                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} tCO₂e</div>"
+                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} {gas_unit}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
                 f"<div class='ct-summary-label'>Strategies</div>"
@@ -1022,7 +1025,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                     f"<span>{strat['strategy_name']}</span>"
                     f"<span style='white-space:nowrap;margin-left:auto;display:flex;align-items:baseline;gap:6px'>"
                     f"<span style='color:#888;font-weight:700'>{format_number_short(red_t)}</span>"
-                    f"<span style='color:#888;font-weight:400'>tCO₂e</span>"
+                    f"<span style='color:#888;font-weight:400'>{gas_unit}</span>"
                     f"<span style='color:#2e7d32;font-weight:700'>(−{pct_red:.1f}%)</span>"
                     f"</span>"
                     f"</summary>"
@@ -1033,9 +1036,9 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                     f"{desc_html}"
                     f"<div style='display:flex;gap:20px;font-size:15px'>"
                     f"<div><span style='font-weight:700'>Inventory</span>"
-                    f"<br>{format_number_short(inv_t)} tCO₂e</div>"
+                    f"<br>{format_number_short(inv_t)} {gas_unit}</div>"
                     f"<div><span style='font-weight:700;color:#2e7d32'>Reduction</span>"
-                    f"<br>{format_number_short(red_t)} tCO₂e"
+                    f"<br>{format_number_short(red_t)} {gas_unit}"
                     f" <span style='color:#2e7d32'> (−{pct_red:.1f}%)</span></div>"
                     f"<div><span style='font-weight:700'>Assets</span>"
                     f"<br>{n_assets:,}</div>"
@@ -1105,6 +1108,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                 ef_country=ef_country_map, ef_continent=ef_continent_map,
                 ef_global=ef_global_map, ef_units=ef_unit_map,
                 ef_pct_map=ef_pct_map, highlighted_key=selected_subsector,
+                gas_unit=gas_unit,
             ),
             unsafe_allow_html=True,
         )

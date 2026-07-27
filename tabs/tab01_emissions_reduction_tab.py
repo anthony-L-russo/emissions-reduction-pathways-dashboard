@@ -244,6 +244,8 @@ def show_emissions_reduction_plan():
         with gas_sub:
             selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab01_gas")
             selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+            gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+            gas_unit = f"t{gas_label}"
         with forestry_sub:
             forestry_val = st.radio(
                 "Forestry Data:",
@@ -352,10 +354,10 @@ def show_emissions_reduction_plan():
 
         with proportion_scale_bar:
             proportion_help = (
-                "This input defines the fraction of each asset’s emissions reduction potential to include in the plan. "
-                "Assets across all sectors are ranked by reduction potential, and the specified proportion is applied to "
-                "each asset’s opportunity. For example, if an asset has a reduction potential of 100 tCO₂e and the proportion "
-                "is set to 80%, only 80 tCO₂e is counted toward the plan."
+                f"This input defines the fraction of each asset’s emissions reduction potential to include in the plan. "
+                f"Assets across all sectors are ranked by reduction potential, and the specified proportion is applied to "
+                f"each asset’s opportunity. For example, if an asset has a reduction potential of 100 {gas_unit} and the proportion "
+                f"is set to 80%, only 80 {gas_unit} is counted toward the plan."
             )
 
             selected_proportion = st.slider(
@@ -480,7 +482,7 @@ def show_emissions_reduction_plan():
 
     total_emissions = format_number_short(df_pie["country_emissions_quantity"].sum())
     total_emissions_text = (
-        f"1) &nbsp; <span style='color:red;'> {total_emissions}</span> tons of CO2 equivalent emissions, "
+        f"1) &nbsp; <span style='color:red;'> {total_emissions}</span> tons of {gas_label} emissions, "
         f"broken down into the following sectors:"
     )
 
@@ -522,7 +524,7 @@ def show_emissions_reduction_plan():
 
     fig.update_traces(
         text = df_pie.apply(
-            lambda row: f"{row['sector']}<br>{format_number_short(row['emissions_quantity'])} tCO₂e", axis=1
+            lambda row: f"{row['sector']}<br>{format_number_short(row['emissions_quantity'])} {gas_unit}", axis=1
         ),
         textinfo="text+percent",
         textposition="outside",
@@ -771,12 +773,12 @@ def show_emissions_reduction_plan():
             y=static_vals,
             marker_color="#707070",
             customdata=[item["static_emissions_formatted"] for item in consequential_json],
-            hovertemplate="<b>%{x}</b><br>Post-Reduction Emissions: %{customdata} tCO₂e<extra></extra>"
+            hovertemplate=f"<b>%{{x}}</b><br>Post-Reduction Emissions: %{{customdata}} {gas_unit}<extra></extra>"
         )
 
         # green reduction potential bar
         fig.add_bar(
-            name="Reduction Potential (tCO₂e)",
+            name=f"Reduction Potential ({gas_unit})",
             x=sectors,
             y=reduction_vals,
             marker=dict(
@@ -799,11 +801,11 @@ def show_emissions_reduction_plan():
             y=df_stacked_bar["static_emissions_q"],
             marker_color="#707070",
             customdata=df_stacked_bar["formatted_static"],
-            hovertemplate='<b>%{x}</b><br>Post-Reduction Emissions: %{customdata} tCO₂e<extra></extra>'
+            hovertemplate=f'<b>%{{x}}</b><br>Post-Reduction Emissions: %{{customdata}} {gas_unit}<extra></extra>'
         )
 
         fig.add_bar(
-            name='Reduction Potential (tCO2e)',
+            name=f'Reduction Potential ({gas_unit})',
             x=df_stacked_bar["sector"],
             y=df_stacked_bar["emissions_reduction_potential"],
             marker=dict(
@@ -819,8 +821,8 @@ def show_emissions_reduction_plan():
                 "formatted_avoided"
             ]].values,
             hovertemplate=(
-                "<b>%{x}</b><br>"
-                "Reduction Potential: %{customdata[0]} tCO₂e"
+                f"<b>%{{x}}</b><br>"
+                f"Reduction Potential: %{{customdata[0]}} {gas_unit}"
             )
         )
 
@@ -847,7 +849,7 @@ def show_emissions_reduction_plan():
 
         yaxis=dict(
             title=dict(
-                text="Emissions (tCO2e)",
+                text=f"Emissions ({gas_unit})",
                 font=dict(
                     size=18,          # 👈 change y-axis title size here
                     family="Sans-Serif",
@@ -947,7 +949,7 @@ def show_emissions_reduction_plan():
     reductions_text = " , ".join(formatted_reductions)
 
     # Final sentence
-    sentence_2 = f"The top emitting sectors, including {sectors_text}, have opportunities to reduce CO2e emissions by {reductions_text} metric tons, respectively."
+    sentence_2 = f"The top emitting sectors, including {sectors_text}, have opportunities to reduce {gas_label} emissions by {reductions_text} metric tons, respectively."
 
     # ------------------ Building Sentence 3 ------------------
     hr_le_sectors = list(high_reduction_low_emitter_df["sector"])
@@ -1017,7 +1019,7 @@ def show_emissions_reduction_plan():
         sentence_3_and_4 = sentence_4
 
     reduction_text = f"""
-        Using Climate TRACE emissions data, CO2e emissions in {display_region_text if display_region_text != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
+        Using Climate TRACE emissions data, {gas_label} emissions in {display_region_text if display_region_text != 'Global' else 'the world'} could be reduced by {highlight_green_1} metric tons across 5 sectors of high emissions reduction opportunities.
 
         {sentence_2}
 
@@ -1115,9 +1117,11 @@ def show_emissions_reduction_plan():
     
 
     # Current Estimate
-    baseline_year_col_name = f'''{ers_baseline_year} Emissions (tCO2e)'''
+    baseline_year_col_name = f'''{ers_baseline_year} Emissions ({gas_unit})'''
+    asset_reduction_col_name = f"Asset Reduction Potential Per Year ({gas_unit})"
+    net_reduction_col_name = f"Net Reduction Potential Per Year ({gas_unit})"
     asset_table_df[baseline_year_col_name] = asset_table_df["emissions_quantity"].apply(lambda x: f"{round(x):,}")
-    asset_table_df["Asset Reduction Potential Per Year (tCO2e)"] = asset_table_df["emissions_reduction_potential"].fillna(0).apply(lambda x: f"{round(x):,}")
+    asset_table_df[asset_reduction_col_name] = asset_table_df["emissions_reduction_potential"].fillna(0).apply(lambda x: f"{round(x):,}")
 
     if use_ct_ers is True:
         asset_table_df = asset_table_df[['asset_url',
@@ -1127,16 +1131,16 @@ def show_emissions_reduction_plan():
                                          'asset_type',
                                          'strategy_name',
                                          baseline_year_col_name,
-                                         'Asset Reduction Potential Per Year (tCO2e)',
+                                         asset_reduction_col_name,
                                          'total_emissions_reduced_per_year']]
 
-        asset_table_df["Net Reduction Potential Per Year (tCO2e)"]  = asset_table_df["total_emissions_reduced_per_year"].apply(lambda x: f"{round(x):,}")
+        asset_table_df[net_reduction_col_name]  = asset_table_df["total_emissions_reduced_per_year"].apply(lambda x: f"{round(x):,}")
         asset_table_df = asset_table_df.drop(columns=["total_emissions_reduced_per_year"])
         styled_df = asset_table_df.style.applymap(
             lambda val: "color: red", subset=[baseline_year_col_name]
         ).applymap(
-            lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)",
-                                                "Net Reduction Potential Per Year (tCO2e)"]
+            lambda val: "color: green", subset=[asset_reduction_col_name,
+                                                net_reduction_col_name]
         )
     else:
         asset_table_df = asset_table_df[['asset_url',
@@ -1145,11 +1149,11 @@ def show_emissions_reduction_plan():
                                          'subsector',
                                          'asset_type',
                                          baseline_year_col_name,
-                                         'Asset Reduction Potential Per Year (tCO2e)']]
+                                         asset_reduction_col_name]]
         styled_df = asset_table_df.style.applymap(
             lambda val: "color: red", subset=[baseline_year_col_name]
         ).applymap(
-            lambda val: "color: green", subset=["Asset Reduction Potential Per Year (tCO2e)"]
+            lambda val: "color: green", subset=[asset_reduction_col_name]
         )
 
     row_height = 35  # pixels per row (adjust as needed)
