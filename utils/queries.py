@@ -977,6 +977,8 @@ def summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, 
 
 
 def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
+    gas_label = "CO₂e" if gas == "co2e_100yr" else "CH₄"
+    gas_unit = f"t{gas_label}"
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_table_assets_sql = f'''
         SELECT 
@@ -999,10 +1001,10 @@ def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_
             ae.mechanism,
             SUM(ae.activity) AS activity,
             SUM(ae.capacity) AS capacity,
-            ROUND(SUM(ae.emissions_quantity), 0) AS "emissions_quantity (t CO2e)",
+            ROUND(SUM(ae.emissions_quantity), 0) AS "emissions_quantity ({gas_unit})",
             SUM(ae.emissions_quantity) / NULLIF(SUM(ae.activity), 0) AS emissions_factor,
-            ROUND(ae.emissions_reduced_at_asset) AS "asset_reduction_potential (t CO2e)",
-            ROUND(ae.total_emissions_reduced_per_year) AS "reduction_potential (t CO2e)",
+            ROUND(ae.emissions_reduced_at_asset) AS "asset_reduction_potential ({gas_unit})",
+            ROUND(ae.total_emissions_reduced_per_year) AS "reduction_potential ({gas_unit})",
             ae.asset_difficulty_score
         FROM '{annual_asset_path}' ae
         LEFT JOIN (
