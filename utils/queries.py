@@ -642,7 +642,7 @@ Returns: query_sector_assets_sql
 Type: string (SQL)
 '''
 
-def find_sector_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause):
+def find_sector_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_sector_assets_sql = f'''
         SELECT 
@@ -714,6 +714,7 @@ def find_sector_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_p
             AND ae.year = {selected_year}
             AND ae.reduction_q_type = 'asset'
             AND {geography_filters_clause}
+            AND ae.gas = '{gas}'
             AND ae.total_emissions_reduced_per_year IS NOT NULL
         GROUP BY
             ae.year,
@@ -758,7 +759,7 @@ Returns: query_total_sql
 Type: string (SQL)
 '''
 
-def summarize_totals_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause):
+def summarize_totals_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_total_sql = f'''
         WITH summary_by_asset AS (
@@ -801,6 +802,7 @@ def summarize_totals_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_pat
             AND year = {selected_year}
             AND reduction_q_type = 'asset'
             AND {geography_filters_clause}
+            AND ae.gas = '{gas}'
             AND ae.total_emissions_reduced_per_year IS NOT NULL
             GROUP BY ae.iso3_country, ae.balancing_authority_region, ae.asset_id, ae.subsector, ae.strategy_name, ae.total_emissions_reduced_per_year
         )
@@ -824,7 +826,7 @@ Returns: query_reductions_sql
 Type: string (SQL)
 '''
 
-def summarize_reductions_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause):
+def summarize_reductions_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_reductions_sql = f'''
         WITH summary_by_asset AS (
@@ -865,6 +867,7 @@ def summarize_reductions_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2
             WHERE subsector IN ({formatted_subsectors})
             AND year = {selected_year}
             AND {geography_filters_clause}
+            AND ae.gas = '{gas}'
             AND ae.total_emissions_reduced_per_year IS NOT NULL
             GROUP BY ae.iso3_country, ae.balancing_authority_region, ae.asset_id, ae.strategy_name, ae.total_emissions_reduced_per_year
         )
@@ -884,16 +887,17 @@ Returns: query_emissions_sql
 Type: string (SQL)
 '''
 
-def summarize_emissions_sql(path, selected_subsector, selected_year, geography_filters_clause):
+def summarize_emissions_sql(path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_emissions_sql = f'''
-        SELECT 
+        SELECT
             year,
             sector,
             SUM(emissions_quantity) AS emissions_quantity
         FROM '{path}'
         WHERE subsector IN ({formatted_subsectors})
             AND year = {selected_year}
+            AND gas = '{gas}'
             AND {geography_filters_clause}
         GROUP BY year, sector
         ORDER BY sector
@@ -910,7 +914,7 @@ Returns: query_ers_sql, query_table_assets_sql
 Type: string (SQL)
 '''
 
-def summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause):
+def summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_ers_sql = f'''
         WITH asset_level AS (
@@ -952,6 +956,7 @@ def summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, 
             WHERE subsector IN ({formatted_subsectors})
             AND year = {selected_year}
             AND reduction_q_type = 'asset'
+            AND ae.gas = '{gas}'
             AND {geography_filters_clause}
             AND ae.total_emissions_reduced_per_year IS NOT NULL
             GROUP BY asset_id, subsector, strategy_name, strategy_description, mechanism
@@ -971,7 +976,9 @@ def summarize_ers_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, 
     return query_ers_sql
 
 
-def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause):
+def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_path, city_path, selected_subsector, selected_year, geography_filters_clause, gas='co2e_100yr'):
+    gas_label = "CO₂e" if gas == "co2e_100yr" else "CH₄"
+    gas_unit = f"t{gas_label}"
     formatted_subsectors = ', '.join(f"'{subsector}'" for subsector in selected_subsector)
     query_table_assets_sql = f'''
         SELECT 
@@ -994,10 +1001,10 @@ def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_
             ae.mechanism,
             SUM(ae.activity) AS activity,
             SUM(ae.capacity) AS capacity,
-            ROUND(SUM(ae.emissions_quantity), 0) AS "emissions_quantity (t CO2e)",
+            ROUND(SUM(ae.emissions_quantity), 0) AS "emissions_quantity ({gas_unit})",
             SUM(ae.emissions_quantity) / NULLIF(SUM(ae.activity), 0) AS emissions_factor,
-            ROUND(ae.emissions_reduced_at_asset) AS "asset_reduction_potential (t CO2e)",
-            ROUND(ae.total_emissions_reduced_per_year) AS "reduction_potential (t CO2e)",
+            ROUND(ae.emissions_reduced_at_asset) AS "asset_reduction_potential ({gas_unit})",
+            ROUND(ae.total_emissions_reduced_per_year) AS "reduction_potential ({gas_unit})",
             ae.asset_difficulty_score
         FROM '{annual_asset_path}' ae
         LEFT JOIN (
@@ -1030,6 +1037,7 @@ def create_table_assets_sql(annual_asset_path, gadm_0_path, gadm_1_path, gadm_2_
             subsector IN ({formatted_subsectors})
             AND year = {selected_year}
             AND reduction_q_type = 'asset'
+            AND ae.gas = '{gas}'
             AND {geography_filters_clause}
             AND ae.total_emissions_reduced_per_year IS NOT NULL
         GROUP BY
@@ -1068,6 +1076,7 @@ def create_heatmap_sql(country_selected_bool,
                        sum_column,
                        gadm_1_path=None,
                        gadm_2_path=None,
+                       gas='co2e_100yr',
                        ):
     
     # agriculture
@@ -1184,12 +1193,14 @@ def create_heatmap_sql(country_selected_bool,
                 , a.sector
                 , a.{sum_column}
                 , a.most_granular
-            
+                , a.gas
+
             from '{annual_asset_path}' a
             {sector_total_join}
         ) a
 
         where most_granular is true
+            and a.gas = '{gas}'
         
     '''
 
@@ -1221,6 +1232,7 @@ def create_heatmap_sql(country_selected_bool,
             from '{annual_asset_path}'
 
             where most_granular is true
+                and gas = '{gas}'
         ) a
 
         {table_join}
@@ -1237,7 +1249,7 @@ def create_heatmap_sql(country_selected_bool,
 
     return heatmap_sql
 
-def get_non_broadcasting_vessel_emissions(table, con):
+def get_non_broadcasting_vessel_emissions(table, con, gas='co2e_100yr'):
 
     sql = f'''
         select *
@@ -1246,7 +1258,7 @@ def get_non_broadcasting_vessel_emissions(table, con):
 
         where country_name = 'Unknown'
             and subsector = 'non-broadcasting-vessels'
-            and gas = 'co2e_100yr'
+            and gas = '{gas}'
     '''
     
     record = con.execute(sql).df()
@@ -1404,7 +1416,7 @@ def build_subsector_reduction_percentile_download(
     
     return subsector_reduction_sql_string
 
-def get_ownership_sql(annual_asset_path, ownership_path):
+def get_ownership_sql(annual_asset_path, ownership_path, gas='co2e_100yr'):
     query_ownership_sql = f'''
     SELECT
         ao.asset_id,
@@ -1437,6 +1449,7 @@ def get_ownership_sql(annual_asset_path, ownership_path):
     WHERE
         ae.year = {ers_baseline_year}
         AND ae.reduction_q_type = 'asset'
+        AND ae.gas = '{gas}'
     GROUP BY
         ao.asset_id,
         ae.asset_name,
@@ -1468,7 +1481,7 @@ def get_ownership_sql(annual_asset_path, ownership_path):
     '''
     return query_ownership_sql
 
-def get_gadm_emissions_sql(gadm_0_path):
+def get_gadm_emissions_sql(gadm_0_path, gas='co2e_100yr'):
     query_ct_emissions = f'''
     SELECT
         ge.iso3_country,
@@ -1478,7 +1491,7 @@ def get_gadm_emissions_sql(gadm_0_path):
     FROM '{gadm_0_path}' ge
     WHERE
         ge.year = {ers_baseline_year}
-        AND ge.gas = 'co2e_100yr'
+        AND ge.gas = '{gas}'
     GROUP BY
         ge.iso3_country,
         ge.subsector
@@ -1496,7 +1509,8 @@ def build_country_subsector_ef_download(
                                     reduction_where_sql,
                                     region_condition,
                                     selected_year,
-                                    exclude_forestry
+                                    exclude_forestry,
+                                    gas='co2e_100yr',
                                 ):
     
 
@@ -1546,7 +1560,7 @@ def build_country_subsector_ef_download(
                 , SUM(emissions_quantity) AS emissions_total
             FROM '{gadm_0_path}'
             
-            where gas = 'co2e_100yr'
+            where gas = '{gas}'
                 and year = {selected_year}
                 {conditions}
                 {forestry_where}

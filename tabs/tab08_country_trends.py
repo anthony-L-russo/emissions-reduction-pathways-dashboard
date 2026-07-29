@@ -187,6 +187,7 @@ def _build_sector_table(
     ef_country=None, ef_continent=None, ef_global=None, ef_units=None,
     ef_pct_map=None,
     highlighted_key=None,
+    gas_unit='tCO₂e',
 ):
     """Transposed table: sectors/subsectors as columns.
 
@@ -233,13 +234,13 @@ def _build_sector_table(
     def _link(href, text):
         return f'<a href="{href}" target="_blank" style="color:inherit;text-decoration:underline dotted">{text}</a>'
 
-    country_label = f'{country_flag} {_link(country_url, iso3 + " (tCO₂e)")}' if (country_flag and iso3 and country_url) else '🏳 Country (tCO₂e)'
+    country_label = f'{country_flag} {_link(country_url, f"{iso3} ({gas_unit})")}' if (country_flag and iso3 and country_url) else f'🏳 Country ({gas_unit})'
     rows_html = (
         row(country_label,
             [f'<strong>{format_number_short(country_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row(f'🌐 {_link(continent_url, continent_name + " (tCO₂e)")}',
+        + row(f'🌐 {_link(continent_url, f"{continent_name} ({gas_unit})")}',
               [f'<strong>{format_number_short(continent_vals.get(k, 0))}</strong>' for k in col_keys])
-        + row(f'🌍 {_link(global_url, "Global (tCO₂e)")}',
+        + row(f'🌍 {_link(global_url, f"Global ({gas_unit})")}',
               [f'<strong>{format_number_short(global_vals.get(k, 0))}</strong>' for k in col_keys])
         + row('% of Global', [
             (lambda pct, color: (
@@ -321,11 +322,20 @@ def show_country_trends():
     asset_path = CONFIG['asset_emissions_country_subsector_path']
     demographic_path = CONFIG['demographic_path']
 
+    gas_options = {"CO₂e": "co2e_100yr", "CH₄": "ch4"}
+    c_country, c_sector, c_subsector, c_from, c_to, c_forestry, c_gas = st.columns([1.6, 1.4, 1.4, 0.9, 0.9, 1.1, 0.7])
+
+    with c_gas:
+        selected_gas_label = st.segmented_control(label="Gas", options=list(gas_options.keys()), default="CO₂e", key="tab08_gas")
+        selected_gas = gas_options.get(selected_gas_label, "co2e_100yr")
+        gas_label = "CO₂e" if selected_gas == "co2e_100yr" else "CH₄"
+        gas_unit = f"t{gas_label}"
+
     # ── Country list ──────────────────────────────────────────────────────────
     countries_df = _cached_df(f"""
         SELECT DISTINCT country_name, iso3_country
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND country_name IS NOT NULL
           AND iso3_country IS NOT NULL
           AND length(iso3_country) = 3
@@ -334,9 +344,6 @@ def show_country_trends():
 
     country_options = countries_df['country_name'].tolist()
     country_to_iso3 = dict(zip(countries_df['country_name'], countries_df['iso3_country']))
-
-    # ── Controls: all on one row ──────────────────────────────────────────────
-    c_country, c_sector, c_subsector, c_from, c_to, c_forestry = st.columns([1.6, 1.4, 1.4, 0.9, 0.9, 1.1])
 
     # Render forestry toggle first so its value is available to the sector dropdown
     with c_forestry:
@@ -377,7 +384,7 @@ def show_country_trends():
         sub_rows = _cached_df(f"""
             SELECT DISTINCT subsector
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
               AND iso3_country = '{iso3}'
               AND sector = '{selected_sector}'
               AND "2025_total_emissions" > 0
@@ -417,7 +424,7 @@ def show_country_trends():
     # ── Country continent ─────────────────────────────────────────────────────
     continent_row = _cached_fetchone(f"""
         SELECT continent FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND iso3_country = '{iso3}'
           AND continent IN {str(GEOGRAPHIC_CONTINENTS)}
         LIMIT 1
@@ -448,7 +455,7 @@ def show_country_trends():
                SUM({to_col})   AS y_to,
                SUM({prev_col}) AS y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND iso3_country = '{iso3}'
           {where_extra}
         GROUP BY {group_col}
@@ -468,7 +475,7 @@ def show_country_trends():
                SUM({from_col}) AS global_y_from,
                SUM({prev_col}) AS global_y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr' AND length(iso3_country) = 3
+        WHERE gas = '{selected_gas}' AND length(iso3_country) = 3
           {where_extra}
         GROUP BY {group_col}
     """)
@@ -482,7 +489,7 @@ def show_country_trends():
                SUM({from_col}) AS cont_y_from,
                SUM({prev_col}) AS cont_y_prev
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND continent = '{country_continent}'
           AND length(iso3_country) = 3
           {where_extra}
@@ -498,7 +505,7 @@ def show_country_trends():
             SELECT iso3_country, {group_col} AS grp,
                    SUM({to_col}) AS total
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr' AND iso3_country IS NOT NULL
+            WHERE gas = '{selected_gas}' AND iso3_country IS NOT NULL
               AND length(iso3_country) = 3 {where_extra}
             GROUP BY iso3_country, {group_col}
         )
@@ -516,7 +523,7 @@ def show_country_trends():
             SELECT iso3_country, {group_col} AS grp,
                    SUM({to_col}) AS total
             FROM '{stats_path}'
-            WHERE gas = 'co2e_100yr'
+            WHERE gas = '{selected_gas}'
               AND continent = '{country_continent}'
               AND iso3_country IS NOT NULL AND length(iso3_country) = 3
               {where_extra}
@@ -534,7 +541,7 @@ def show_country_trends():
     global_count_df = _cached_df(f"""
         SELECT {group_col} AS grp, COUNT(DISTINCT iso3_country) AS n
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr' AND length(iso3_country) = 3
+        WHERE gas = '{selected_gas}' AND length(iso3_country) = 3
           AND {to_col} > 0 {where_extra}
         GROUP BY {group_col}
     """)
@@ -543,7 +550,7 @@ def show_country_trends():
     cont_count_df = _cached_df(f"""
         SELECT {group_col} AS grp, COUNT(DISTINCT iso3_country) AS n
         FROM '{stats_path}'
-        WHERE gas = 'co2e_100yr'
+        WHERE gas = '{selected_gas}'
           AND continent = '{country_continent}'
           AND length(iso3_country) = 3
           AND {to_col} > 0 {where_extra}
@@ -561,7 +568,7 @@ def show_country_trends():
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
                 WHERE iso3_country = '{iso3}' AND sector = '{selected_sector}'
-                  AND gas = 'co2e_100yr'
+                  AND gas = '{selected_gas}'
                   AND weighted_average_emissions_factor > 0
                   AND weighted_average_emissions_factor IS NOT NULL
                 GROUP BY original_inventory_sector
@@ -574,13 +581,13 @@ def show_country_trends():
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
             WHERE m.iso3_country = '{iso3}' AND m.sector = '{selected_sector}'
-              AND m.gas = 'co2e_100yr'
+              AND m.gas = '{selected_gas}'
               AND m.weighted_average_emissions_factor > 0
         """)
         ef_country_map = dict(zip(ef_country_df['grp'], ef_country_df['ef']))
         # EF unit = "t CO₂e / {activity_units}"
         ef_unit_map = {
-            grp: f"t CO₂e / {unit}" if unit else "—"
+            grp: f"{gas_unit} / {unit}" if unit else "—"
             for grp, unit in zip(ef_country_df['grp'], ef_country_df['activity_units'])
         }
 
@@ -589,7 +596,7 @@ def show_country_trends():
             WITH latest AS (
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
-                WHERE sector = '{selected_sector}' AND gas = 'co2e_100yr'
+                WHERE sector = '{selected_sector}' AND gas = '{selected_gas}'
                   AND continent = '{country_continent}' AND length(iso3_country) = 3
                   AND weighted_average_emissions_factor > 0
                 GROUP BY original_inventory_sector
@@ -601,7 +608,7 @@ def show_country_trends():
             JOIN latest l
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
-            WHERE m.sector = '{selected_sector}' AND m.gas = 'co2e_100yr'
+            WHERE m.sector = '{selected_sector}' AND m.gas = '{selected_gas}'
               AND m.continent = '{country_continent}' AND length(m.iso3_country) = 3
               AND m.weighted_average_emissions_factor > 0
             GROUP BY m.original_inventory_sector
@@ -613,7 +620,7 @@ def show_country_trends():
             WITH latest AS (
                 SELECT original_inventory_sector, MAX(start_time) AS max_t
                 FROM '{asset_path}'
-                WHERE sector = '{selected_sector}' AND gas = 'co2e_100yr'
+                WHERE sector = '{selected_sector}' AND gas = '{selected_gas}'
                   AND length(iso3_country) = 3
                   AND weighted_average_emissions_factor > 0
                 GROUP BY original_inventory_sector
@@ -625,7 +632,7 @@ def show_country_trends():
             JOIN latest l
               ON m.original_inventory_sector = l.original_inventory_sector
              AND m.start_time = l.max_t
-            WHERE m.sector = '{selected_sector}' AND m.gas = 'co2e_100yr'
+            WHERE m.sector = '{selected_sector}' AND m.gas = '{selected_gas}'
               AND length(m.iso3_country) = 3
               AND m.weighted_average_emissions_factor > 0
             GROUP BY m.original_inventory_sector
@@ -639,11 +646,11 @@ def show_country_trends():
                     SELECT activity_units FROM '{asset_path}'
                     WHERE sector = '{selected_sector}'
                       AND original_inventory_sector = '{grp}'
-                      AND gas = 'co2e_100yr'
+                      AND gas = '{selected_gas}'
                     LIMIT 1
                 """)
                 if unit_row:
-                    ef_unit_map[grp] = f"t CO₂e / {unit_row[0]}" if unit_row[0] else "—"
+                    ef_unit_map[grp] = f"{gas_unit} / {unit_row[0]}" if unit_row[0] else "—"
 
         # EF percentile: country's EF vs all individual assets globally
         # Fetch all asset EFs for the sector at latest year, compute in pandas
@@ -810,14 +817,14 @@ def show_country_trends():
                 textposition='inside',
                 insidetextorientation='auto',
                 textfont=dict(size=12),
-                hovertemplate='%{label}<br>%{value:.3f} MtCO₂e (%{percent})<extra></extra>',
+                hovertemplate=f'%{{label}}<br>%{{value:.3f}} Mt{gas_label} (%{{percent}})<extra></extra>',
             ))
             if selected_subsector and selected_subsector in col_keys:
                 pulls = [0.0] * len(col_keys)
                 pulls[col_keys.index(selected_subsector)] = 0.08
                 fig_pie.data[0].pull = pulls
             fig_pie.add_annotation(
-                text=f"<b>{format_number_short(total_mt * 1e6)}</b><br>tCO₂e",
+                text=f"<b>{format_number_short(total_mt * 1e6)}</b><br>{gas_unit}",
                 x=0.29, y=0.5, showarrow=False,
                 font=dict(size=13), align='center',
             )
@@ -959,11 +966,11 @@ def show_country_trends():
                 f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px'>"
                 f"<div class='ct-summary-card' style='border-top:3px solid rgba(128,128,128,0.5)'>"
                 f"<div class='ct-summary-label'>Inventory</div>"
-                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} tCO₂e</div>"
+                f"<div class='ct-summary-value' style='color:var(--text-color)'>{format_number_short(total_inv)} {gas_unit}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid #2e7d32'>"
                 f"<div class='ct-summary-label'>Reducible</div>"
-                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} tCO₂e</div>"
+                f"<div class='ct-summary-value' style='color:#2e7d32'>{format_number_short(total_red)} {gas_unit}</div>"
                 f"</div>"
                 f"<div class='ct-summary-card' style='border-top:3px solid {accent}'>"
                 f"<div class='ct-summary-label'>Strategies</div>"
@@ -1018,7 +1025,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                     f"<span>{strat['strategy_name']}</span>"
                     f"<span style='white-space:nowrap;margin-left:auto;display:flex;align-items:baseline;gap:6px'>"
                     f"<span style='color:#888;font-weight:700'>{format_number_short(red_t)}</span>"
-                    f"<span style='color:#888;font-weight:400'>tCO₂e</span>"
+                    f"<span style='color:#888;font-weight:400'>{gas_unit}</span>"
                     f"<span style='color:#2e7d32;font-weight:700'>(−{pct_red:.1f}%)</span>"
                     f"</span>"
                     f"</summary>"
@@ -1029,9 +1036,9 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                     f"{desc_html}"
                     f"<div style='display:flex;gap:20px;font-size:15px'>"
                     f"<div><span style='font-weight:700'>Inventory</span>"
-                    f"<br>{format_number_short(inv_t)} tCO₂e</div>"
+                    f"<br>{format_number_short(inv_t)} {gas_unit}</div>"
                     f"<div><span style='font-weight:700;color:#2e7d32'>Reduction</span>"
-                    f"<br>{format_number_short(red_t)} tCO₂e"
+                    f"<br>{format_number_short(red_t)} {gas_unit}"
                     f" <span style='color:#2e7d32'> (−{pct_red:.1f}%)</span></div>"
                     f"<div><span style='font-weight:700'>Assets</span>"
                     f"<br>{n_assets:,}</div>"
@@ -1101,6 +1108,7 @@ details.ct-strat[open] summary::after{transform:rotate(90deg);}
                 ef_country=ef_country_map, ef_continent=ef_continent_map,
                 ef_global=ef_global_map, ef_units=ef_unit_map,
                 ef_pct_map=ef_pct_map, highlighted_key=selected_subsector,
+                gas_unit=gas_unit,
             ),
             unsafe_allow_html=True,
         )
