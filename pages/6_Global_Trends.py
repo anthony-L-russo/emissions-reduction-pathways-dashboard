@@ -22,6 +22,12 @@ st.markdown(
     [data-testid="collapsedControl"] {
         display: none;
     }
+    [data-testid="stPageLink-NavLink"],
+    [data-testid="stPageLink-NavLink"] span,
+    [data-testid="stPageLink-NavLink"] p {
+        color: #ff4b4b !important;
+        font-weight: 600;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -35,17 +41,7 @@ def get_base64_of_bin_file(bin_file_path):
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown(
-    """
-    <p style="margin-bottom: 1rem;">
-        <a href="/Home" target="_self"
-           style="text-decoration: none; font-size: 1.1rem; font-weight: 600; color: #ff4b4b; cursor: pointer;">
-            ⬅️ Back to Home
-        </a>
-    </p>
-    """,
-    unsafe_allow_html=True
-)
+st.page_link("pages/0_Home.py", label="⬅️ Back to Home")
 
 
 logo_base64 = get_base64_of_bin_file("Climate TRACE Logo.png")
