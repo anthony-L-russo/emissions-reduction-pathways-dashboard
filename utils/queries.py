@@ -1164,7 +1164,7 @@ def create_heatmap_sql(country_selected_bool,
         table_join = ""
         field = "country_name "
 
-    if sum_column == "Reduction Potential":
+    if sum_column == "total_emissions_reduced_per_year":
         alias = 'total_reduction_potential'
     else:
         alias = 'total_emissions_quantity'
